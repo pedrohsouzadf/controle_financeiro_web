@@ -118,9 +118,8 @@ const Dashboard = (() => {
 
     const kpis = [
       { label: "Total receitas - renda", value: receitasRendaMes, cls: "positive" },
-      { label: "Gastos - dinheiro", value: despesasContaCorrenteMes, cls: "negative" },
-      { label: "Saldo (dinheiro)", value: saldo, cls: saldo >= 0 ? "positive" : "negative" },
-      { label: "Gastos fixos totais", value: gastosFixosTotais, cls: "negative" }
+      { label: "Gastos totais", value: despesasContaCorrenteMes, cls: "negative" },
+      { label: "Saldo total", value: saldo, cls: saldo >= 0 ? "positive" : "negative" }
     ];
 
     const el = document.getElementById("dashboard-kpis");
