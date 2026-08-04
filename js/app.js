@@ -24,11 +24,17 @@
   }
 
   // Referências preenchidas em init() — usadas pelos botões "Editar" das tabelas.
-  let despesasEditor, fixosEditor, cartaoEditor;
+  let receitasEditor, despesasEditor, fixosEditor, cartaoEditor;
+
+  function setTabTotal(elId, value) {
+    const el = document.getElementById(elId);
+    if (el) el.textContent = UI.formatBRL(value);
+  }
 
   // ---------- RECEITAS ----------
   function renderReceitas() {
     const rows = UI.sortByDateDesc(Store.get().receitas);
+    setTabTotal("total-receitas-tab", rows.reduce((s, r) => s + Number(r.valor || 0), 0));
     UI.renderTable(
       document.querySelector("#table-receitas tbody"),
       rows,
@@ -46,6 +52,7 @@
         { render: (r) => (isRecorrente(r) ? `<span class="tag" style="background:#e6f9ec;color:#1a7f3c;">Recorrente</span>` : "") }
       ],
       [
+        { label: "Editar", className: "btn secondary", onClick: (row) => receitasEditor.startEdit(row) },
         {
           label: "Excluir",
           className: "btn danger",
@@ -68,6 +75,7 @@
   // ---------- DESPESAS DIA A DIA ----------
   function renderDespesas() {
     const rows = UI.sortByDateDesc(Store.get().despesas);
+    setTabTotal("total-despesas-tab", rows.reduce((s, r) => s + Number(r.valor || 0), 0));
     UI.renderTable(
       document.querySelector("#table-despesas tbody"),
       rows,
@@ -121,6 +129,7 @@
       vencimentoLabel: "—"
     }));
     const rows = [...boletos, ...cartaoRecorrentes];
+    setTabTotal("total-fixos-tab", rows.reduce((s, r) => s + Number(r.valorMensal || 0), 0));
 
     UI.renderTable(
       document.querySelector("#table-fixos tbody"),
@@ -173,6 +182,7 @@
   // ---------- CARTÃO DE CRÉDITO ----------
   function renderCartao() {
     const rows = UI.sortByDateDesc(Store.get().cartao);
+    setTabTotal("total-cartao-tab", rows.reduce((s, r) => s + Number(r.valor || 0), 0));
     UI.renderTable(
       document.querySelector("#table-cartao tbody"),
       rows,
@@ -488,9 +498,9 @@
     setupNav();
     showConfigBannerIfNeeded();
 
-    setupForm("form-receitas", "receitas", renderReceitas);
     setupForm("form-poupanca", "poupanca", renderPoupanca);
 
+    receitasEditor = setupEditableForm("form-receitas", "receitas", renderReceitas);
     despesasEditor = setupEditableForm("form-despesas", "despesas", renderDespesas);
     fixosEditor = setupEditableForm("form-fixos", "fixos", renderFixos);
     cartaoEditor = setupEditableForm("form-cartao", "cartao", () => {
