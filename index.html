@@ -109,7 +109,7 @@
         <div class="kpi-value" id="total-despesas-tab" style="font-size:18px;">R$ 0,00</div>
       </div>
     </div>
-    <div id="despesas-por-categoria" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;"></div>
+    <div id="despesas-por-fonte" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;"></div>
     <div class="card">
       <h3>Adicionar despesa</h3>
       <form class="inline-form" id="form-despesas">
@@ -271,6 +271,29 @@
       <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Marque "Recorrente" para assinaturas fixas cobradas no cartão (academia, streaming, seguro) — assim elas entram automaticamente todo mês, sem precisar recadastrar, e contam também no indicador de "Gastos fixos totais" do Dashboard.</p>
       <table id="table-cartao">
         <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Cartão</th><th>Parcela</th><th>Valor</th><th></th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <!-- ---------------- QUITAÇÃO DE PARCELAS ANTIGAS ---------------- -->
+    <div class="section-title-row" style="margin-top:32px;">
+      <div class="section-title">Quitação de parcelas antigas</div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div class="kpi-value negative" id="total-quitacao-tab" style="font-size:18px;">R$ 0,00</div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Adicionar parcelamento em aberto</h3>
+      <p style="font-size:12px; color:var(--text-muted); margin-top:-4px;">Use esta lista para organizar parcelamentos antigos que você já fez e ainda precisa quitar — diferente da tabela acima, que é para os lançamentos correntes do cartão.</p>
+      <form class="inline-form" id="form-quitacao">
+        <div><label>Cartão</label><input type="text" name="cartao" required placeholder="Ex: Nubank" /></div>
+        <div><label>Descrição da compra</label><input type="text" name="descricao" required placeholder="Ex: Notebook" /></div>
+        <div><label>Valor total (R$)</label><input type="number" step="0.01" name="valorTotal" required placeholder="0,00" /></div>
+        <div><label>Quantidade de parcelas</label><input type="number" min="1" name="qtdParcelas" required placeholder="Ex: 10" /></div>
+        <div><button class="btn" type="submit">Adicionar</button></div>
+      </form>
+      <table id="table-quitacao">
+        <thead><tr><th>Cartão</th><th>Descrição</th><th>Valor total</th><th>Parcelas</th><th>Valor da parcela</th><th>Quitada</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>

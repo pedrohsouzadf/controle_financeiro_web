@@ -119,18 +119,20 @@
   }
 
   // ---------- DESPESAS DIA A DIA ----------
-  // Mostra, no cabeçalho da aba, o total gasto em cada categoria (dentro do
-  // filtro de mês aplicado), como pílulas ordenadas do maior para o menor gasto.
-  function renderDespesasPorCategoria(rows) {
-    const el = document.getElementById("despesas-por-categoria");
+  // Mostra, no cabeçalho da aba, o total gasto em cada fonte de pagamento
+  // (Débito, VA, CAJU — dentro do filtro de mês aplicado), como pílulas
+  // ordenadas do maior para o menor gasto.
+  function renderDespesasPorFonte(rows) {
+    const el = document.getElementById("despesas-por-fonte");
     if (!el) return;
-    const porCategoria = {};
+    const porFonte = {};
     rows.forEach((r) => {
-      porCategoria[r.categoria] = (porCategoria[r.categoria] || 0) + Number(r.valor || 0);
+      const fonte = r.fonte || "Débito";
+      porFonte[fonte] = (porFonte[fonte] || 0) + Number(r.valor || 0);
     });
-    const entradas = Object.entries(porCategoria).sort((a, b) => b[1] - a[1]);
+    const entradas = Object.entries(porFonte).sort((a, b) => b[1] - a[1]);
     el.innerHTML = entradas.length
-      ? entradas.map(([cat, val]) => `<span class="tag">${cat}: ${UI.formatBRL(val)}</span>`).join("")
+      ? entradas.map(([fonte, val]) => `<span class="tag">${fonte}: ${UI.formatBRL(val)}</span>`).join("")
       : "";
   }
 
@@ -139,7 +141,7 @@
     popularFiltroMes("filtro-mes-despesas", all, "data", "despesas", renderDespesas);
     const rows = filtrarPorMes(all, "data", "despesas");
     setTabTotal("total-despesas-tab", rows.reduce((s, r) => s + Number(r.valor || 0), 0));
-    renderDespesasPorCategoria(rows);
+    renderDespesasPorFonte(rows);
     UI.renderTable(
       document.querySelector("#table-despesas tbody"),
       rows,
@@ -304,6 +306,65 @@
         }
       ]
     );
+  }
+
+  // ---------- QUITAÇÃO DE PARCELAS ANTIGAS ----------
+  function isQuitada(item) {
+    return item.quitada === true || item.quitada === "true";
+  }
+
+  function renderQuitacao() {
+    // Itens em aberto primeiro, os já quitados vão para o final da lista.
+    const rows = Store.get().quitacao.slice().sort((a, b) => Number(isQuitada(a)) - Number(isQuitada(b)));
+    const totalEmAberto = rows
+      .filter((r) => !isQuitada(r))
+      .reduce((s, r) => s + Number(r.valorTotal || 0), 0);
+    setTabTotal("total-quitacao-tab", totalEmAberto);
+
+    UI.renderTable(
+      document.querySelector("#table-quitacao tbody"),
+      rows,
+      [
+        { field: "cartao" },
+        { field: "descricao" },
+        { render: (r) => `<span class="value-out">${UI.formatBRL(r.valorTotal)}</span>` },
+        { field: "qtdParcelas" },
+        { render: (r) => UI.formatBRL(Number(r.valorTotal || 0) / Math.max(1, Number(r.qtdParcelas || 1))) },
+        {
+          render: (r) =>
+            `<input type="checkbox" class="quitacao-checkbox" data-id="${r.id}" ${isQuitada(r) ? "checked" : ""} style="width:auto;" />`
+        }
+      ],
+      [
+        {
+          label: "Excluir",
+          className: "btn danger",
+          onClick: async (row) => {
+            if (!confirm("Excluir este parcelamento?")) return;
+            try {
+              await Store.deleteItem("quitacao", row.id);
+              renderQuitacao();
+              UI.toast("Parcelamento excluído");
+            } catch (e) {
+              UI.toast(e.message, true);
+            }
+          }
+        }
+      ]
+    );
+
+    // O checkbox "Quitada" atualiza na hora, sem precisar reabrir o formulário.
+    document.querySelectorAll(".quitacao-checkbox").forEach((cb) => {
+      cb.addEventListener("change", async () => {
+        try {
+          await Store.updateItem("quitacao", cb.dataset.id, { quitada: cb.checked ? "true" : "false" });
+          renderQuitacao();
+          UI.toast(cb.checked ? "Marcado como quitado" : "Marcado como em aberto");
+        } catch (e) {
+          UI.toast(e.message, true);
+        }
+      });
+    });
   }
 
   // ---------- POUPANÇA ----------
@@ -593,6 +654,7 @@
     showConfigBannerIfNeeded();
 
     setupForm("form-poupanca", "poupanca", renderPoupanca);
+    setupForm("form-quitacao", "quitacao", renderQuitacao);
 
     receitasEditor = setupEditableForm("form-receitas", "receitas", renderReceitas);
     despesasEditor = setupEditableForm("form-despesas", "despesas", renderDespesas);
@@ -616,6 +678,7 @@
     renderDespesas();
     renderFixos();
     renderCartao();
+    renderQuitacao();
     renderPoupanca();
     poupancaConfig.preencherComConfigAtual();
     preencherSimulacaoComPadroes();

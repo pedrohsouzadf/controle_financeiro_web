@@ -6,7 +6,7 @@
 // escrevendo numa tabela DynamoDB.
 //
 // Modelo de dados (single-table design):
-//   pk = "RECEITAS" | "DESPESAS" | "FIXOS" | "CARTAO" | "POUPANCA" | "CONFIG"
+//   pk = "RECEITAS" | "DESPESAS" | "FIXOS" | "CARTAO" | "POUPANCA" | "QUITACAO" | "CONFIG"
 //   sk = id do item (ou a "chave" de configuração, no caso de CONFIG)
 // ==========================================================
 
@@ -31,7 +31,8 @@ const SHEET_TO_PK = {
   despesas: "DESPESAS",
   fixos: "FIXOS",
   cartao: "CARTAO",
-  poupanca: "POUPANCA"
+  poupanca: "POUPANCA",
+  quitacao: "QUITACAO"
 };
 
 const CORS_HEADERS = {
@@ -78,15 +79,16 @@ async function getConfig() {
 }
 
 async function handleGetAll() {
-  const [receitas, despesas, fixos, cartao, poupanca, config] = await Promise.all([
+  const [receitas, despesas, fixos, cartao, poupanca, quitacao, config] = await Promise.all([
     queryByType("RECEITAS"),
     queryByType("DESPESAS"),
     queryByType("FIXOS"),
     queryByType("CARTAO"),
     queryByType("POUPANCA"),
+    queryByType("QUITACAO"),
     getConfig()
   ]);
-  return response(200, { ok: true, receitas, despesas, fixos, cartao, poupanca, config });
+  return response(200, { ok: true, receitas, despesas, fixos, cartao, poupanca, quitacao, config });
 }
 
 async function handleAdd(body) {

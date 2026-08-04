@@ -12,6 +12,7 @@ const Store = (() => {
     fixos: [],
     cartao: [],
     poupanca: [],
+    quitacao: [],
     config: {}
   };
 
@@ -44,6 +45,7 @@ const Store = (() => {
       fixos: data.fixos || [],
       cartao: data.cartao || [],
       poupanca: data.poupanca || [],
+      quitacao: data.quitacao || [],
       config: data.config || {}
     };
     saveCache();
