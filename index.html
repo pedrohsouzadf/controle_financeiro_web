@@ -21,7 +21,7 @@
     <button data-view="dashboard" class="active">Dashboard</button>
     <button data-view="receitas">Receitas</button>
     <button data-view="despesas">Despesas do dia a dia</button>
-    <button data-view="fixos">Gastos fixos (boleto)</button>
+    <button data-view="fixos">Gastos Fixos</button>
     <button data-view="cartao">Cartão de crédito</button>
     <button data-view="poupanca">Poupança &amp; Simulação</button>
   </nav>
@@ -118,9 +118,9 @@
 
   <!-- ===================== GASTOS FIXOS ===================== -->
   <section id="view-fixos" class="view">
-    <div class="section-title">Gastos fixos (pagos por boleto)</div>
+    <div class="section-title">Gastos Fixos</div>
     <div class="card">
-      <h3>Adicionar gasto fixo</h3>
+      <h3>Adicionar gasto fixo pago por boleto</h3>
       <form class="inline-form" id="form-fixos">
         <div><label>Descrição</label><input type="text" name="descricao" required placeholder="Ex: Aluguel" /></div>
         <div>
@@ -139,8 +139,9 @@
         <div><label>Dia de vencimento</label><input type="number" min="1" max="31" name="diaVencimento" required placeholder="Ex: 10" /></div>
         <div><button class="btn" type="submit">Adicionar</button></div>
       </form>
+      <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Assinaturas fixas cobradas no cartão (academia, streaming, seguro) não são cadastradas aqui — marque "Recorrente" na aba <strong>Cartão de crédito</strong> e elas aparecem automaticamente nesta lista também.</p>
       <table id="table-fixos">
-        <thead><tr><th>Descrição</th><th>Categoria</th><th>Valor mensal</th><th>Vencimento</th><th></th></tr></thead>
+        <thead><tr><th>Descrição</th><th>Categoria</th><th>Forma de pagamento</th><th>Valor mensal</th><th>Vencimento</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -169,11 +170,11 @@
         </div>
         <div><label>Cartão</label><input type="text" name="cartao" placeholder="Ex: Nubank" /></div>
         <div><label>Valor total (R$)</label><input type="number" step="0.01" name="valor" required placeholder="0,00" /></div>
-        <div><label>Parcela atual</label><input type="number" min="1" name="parcelaAtual" value="1" /></div>
-        <div><label>Total de parcelas</label><input type="number" min="1" name="parcelasTotal" value="1" /></div>
+        <div id="cartao-parcela-atual-wrap"><label>Parcela atual</label><input type="number" min="1" name="parcelaAtual" value="1" /></div>
+        <div id="cartao-parcelas-total-wrap"><label>Total de parcelas</label><input type="number" min="1" name="parcelasTotal" value="1" /></div>
         <div style="display:flex; align-items:center; gap:6px; padding-bottom:9px;">
           <input type="checkbox" name="recorrente" id="cartao-recorrente" style="width:auto;" />
-          <label for="cartao-recorrente" style="margin:0;">Recorrente (assinatura)</label>
+          <label for="cartao-recorrente" style="margin:0;">Recorrente (assinatura, sem parcelas)</label>
         </div>
         <div><button class="btn" type="submit">Adicionar</button></div>
       </form>

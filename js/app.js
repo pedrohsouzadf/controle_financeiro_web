@@ -77,22 +77,50 @@
   }
 
   // ---------- GASTOS FIXOS ----------
+  // Combina os gastos fixos por boleto com as assinaturas recorrentes do
+  // cartão de crédito numa única lista, já que ambos são compromissos fixos.
   function renderFixos() {
-    const rows = Store.get().fixos;
+    const state = Store.get();
+    const boletos = state.fixos.map((f) => ({
+      id: f.id,
+      origem: "fixos",
+      descricao: f.descricao,
+      categoria: f.categoria,
+      valorMensal: f.valorMensal,
+      formaPagamento: "Boleto",
+      vencimento: `Dia ${f.diaVencimento}`
+    }));
+    const cartaoRecorrentes = state.cartao.filter(isRecorrente).map((c) => ({
+      id: c.id,
+      origem: "cartao",
+      descricao: c.descricao,
+      categoria: c.categoria,
+      valorMensal: c.valor,
+      formaPagamento: c.cartao ? `Cartão (${c.cartao})` : "Cartão de crédito",
+      vencimento: "—"
+    }));
+    const rows = [...boletos, ...cartaoRecorrentes];
+
     UI.renderTable(
       document.querySelector("#table-fixos tbody"),
       rows,
       [
         { field: "descricao" },
         { render: (r) => `<span class="tag">${r.categoria}</span>` },
+        { field: "formaPagamento" },
         { render: (r) => `<span class="value-out">${UI.formatBRL(r.valorMensal)}</span>` },
-        { render: (r) => `Dia ${r.diaVencimento}` }
+        { field: "vencimento" }
       ],
       async (row) => {
-        if (!confirm("Excluir este gasto fixo?")) return;
+        const msg =
+          row.origem === "cartao"
+            ? "Este item vem da aba Cartão de crédito. Excluir?"
+            : "Excluir este gasto fixo?";
+        if (!confirm(msg)) return;
         try {
-          await Store.deleteItem("fixos", row.id);
+          await Store.deleteItem(row.origem, row.id);
           renderFixos();
+          if (row.origem === "cartao") renderCartao();
           Dashboard.render(Store.get());
           UI.toast("Gasto fixo excluído");
         } catch (e) {
@@ -113,7 +141,7 @@
         { field: "descricao" },
         { render: (r) => `<span class="tag">${r.categoria}</span>` },
         { field: "cartao" },
-        { render: (r) => `${r.parcelaAtual || 1}/${r.parcelasTotal || 1}` },
+        { render: (r) => (isRecorrente(r) ? "—" : `${r.parcelaAtual || 1}/${r.parcelasTotal || 1}`) },
         { render: (r) => `<span class="value-out">${UI.formatBRL(r.valor)}</span>` },
         { render: (r) => (isRecorrente(r) ? `<span class="tag" style="background:#e6f9ec;color:#1a7f3c;">Recorrente</span>` : "") }
       ],
@@ -122,6 +150,7 @@
         try {
           await Store.deleteItem("cartao", row.id);
           renderCartao();
+          renderFixos();
           Dashboard.render(Store.get());
           UI.toast("Lançamento excluído");
         } catch (e) {
@@ -199,6 +228,33 @@
     });
   }
 
+  // Quando "Recorrente" é marcado no cartão, desabilita e zera os campos de
+  // parcela (assinaturas não têm número de parcelas).
+  function setupCartaoRecorrenteToggle() {
+    const checkbox = document.getElementById("cartao-recorrente");
+    const parcelaAtualInput = document.querySelector('#form-cartao [name="parcelaAtual"]');
+    const parcelasTotalInput = document.querySelector('#form-cartao [name="parcelasTotal"]');
+    const wrap1 = document.getElementById("cartao-parcela-atual-wrap");
+    const wrap2 = document.getElementById("cartao-parcelas-total-wrap");
+
+    function apply() {
+      const recorrente = checkbox.checked;
+      [parcelaAtualInput, parcelasTotalInput].forEach((input) => {
+        input.disabled = recorrente;
+      });
+      [wrap1, wrap2].forEach((wrap) => {
+        wrap.style.opacity = recorrente ? "0.4" : "1";
+      });
+      if (recorrente) {
+        parcelaAtualInput.value = "1";
+        parcelasTotalInput.value = "1";
+      }
+    }
+
+    checkbox.addEventListener("change", apply);
+    apply();
+  }
+
   function setupSimulacao() {
     const form = document.getElementById("form-simulacao");
     form.addEventListener("submit", (e) => {
@@ -233,8 +289,12 @@
     setupForm("form-receitas", "receitas", renderReceitas);
     setupForm("form-despesas", "despesas", renderDespesas);
     setupForm("form-fixos", "fixos", renderFixos);
-    setupForm("form-cartao", "cartao", renderCartao);
+    setupForm("form-cartao", "cartao", () => {
+      renderCartao();
+      renderFixos();
+    });
     setupForm("form-poupanca", "poupanca", renderPoupanca);
+    setupCartaoRecorrenteToggle();
     setupSimulacao();
 
     try {
