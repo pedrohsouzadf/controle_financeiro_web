@@ -7,4 +7,4 @@
 // Exemplo:
 // const API_URL = "https://script.google.com/macros/s/AKfycb.../exec";
 
-const API_URL = "COLE_AQUI_A_URL_DO_SEU_APPS_SCRIPT";
+const API_URL = "https://script.google.com/macros/s/AKfycbwVOI8a1ZgEZIAoRYzjSNrSFBFCYYgRbxjhRSiyi_l-k73gOalKmF6N-zRoIF8KiuDXZQ/exec";
