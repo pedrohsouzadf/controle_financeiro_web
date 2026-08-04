@@ -212,22 +212,9 @@
 
   <!-- ===================== POUPANÇA / SIMULAÇÃO ===================== -->
   <section id="view-poupanca" class="view">
-    <div class="section-title">Poupança</div>
-
-    <div class="card" style="margin-bottom:16px;">
-      <h3>Configurações</h3>
-      <form class="inline-form" id="form-poupanca-config">
-        <div>
-          <label>Saldo inicial já guardado (R$)</label>
-          <input type="number" step="0.01" id="config-saldo-inicial" placeholder="0,00" />
-        </div>
-        <div>
-          <label>Meta de investimento mensal (R$)</label>
-          <input type="number" step="0.01" id="config-meta-mensal" placeholder="0,00" />
-        </div>
-        <div><button class="btn" type="submit">Salvar</button></div>
-      </form>
-      <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">O saldo inicial é somado aos depósitos/retiradas abaixo para calcular o "Total guardado". A meta mensal pré-preenche a simulação e aparece nos insights do Dashboard, comparando com quanto sobra da sua renda.</p>
+    <div class="section-title-row">
+      <div class="section-title">Poupança</div>
+      <button type="button" class="icon-btn" id="btn-open-poupanca-config" title="Configurações" aria-label="Configurações">⚙️</button>
     </div>
 
     <div class="grid cols-3">
@@ -288,6 +275,29 @@
 <footer>Meu Financeiro — seus dados ficam salvos na sua própria conta AWS (DynamoDB).</footer>
 
 <div class="toast" id="toast"></div>
+
+<!-- ===================== PAINEL LATERAL: CONFIGURAÇÕES DA POUPANÇA ===================== -->
+<div class="side-panel-overlay" id="poupanca-config-overlay"></div>
+<aside class="side-panel" id="poupanca-config-panel">
+  <div class="side-panel-header">
+    <h3>Configurações da poupança</h3>
+    <button type="button" class="icon-btn" id="btn-close-poupanca-config" aria-label="Fechar">✕</button>
+  </div>
+  <div class="side-panel-body">
+    <form id="form-poupanca-config">
+      <div style="margin-bottom:16px;">
+        <label>Saldo inicial já guardado (R$)</label>
+        <input type="number" step="0.01" id="config-saldo-inicial" placeholder="0,00" />
+      </div>
+      <div style="margin-bottom:16px;">
+        <label>Meta de investimento mensal (R$)</label>
+        <input type="number" step="0.01" id="config-meta-mensal" placeholder="0,00" />
+      </div>
+      <button class="btn" type="submit" style="width:100%;">Salvar</button>
+    </form>
+    <p style="font-size:12px; color:var(--text-muted); margin-top:16px;">O saldo inicial é somado aos depósitos/retiradas registrados na aba Poupança para calcular o "Total guardado". A meta mensal pré-preenche a simulação e aparece nos insights do Dashboard, comparando com quanto sobra da sua renda.</p>
+  </div>
+</aside>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="js/config.js"></script>

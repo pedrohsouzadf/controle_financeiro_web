@@ -390,11 +390,16 @@
   }
 
   // Salva o saldo inicial já guardado e a meta de investimento mensal
-  // (ambos ficam gravados na aba Config da planilha/DynamoDB).
+  // (ambos ficam gravados na aba Config da planilha/DynamoDB), controlados
+  // por um painel lateral aberto através do ícone de engrenagem.
   function setupPoupancaConfig() {
     const form = document.getElementById("form-poupanca-config");
     const saldoInput = document.getElementById("config-saldo-inicial");
     const metaInput = document.getElementById("config-meta-mensal");
+    const openBtn = document.getElementById("btn-open-poupanca-config");
+    const closeBtn = document.getElementById("btn-close-poupanca-config");
+    const overlay = document.getElementById("poupanca-config-overlay");
+    const panel = document.getElementById("poupanca-config-panel");
 
     function preencherComConfigAtual() {
       const config = Store.get().config || {};
@@ -406,6 +411,21 @@
       }
     }
 
+    function openPanel() {
+      preencherComConfigAtual();
+      overlay.classList.add("open");
+      panel.classList.add("open");
+    }
+
+    function closePanel() {
+      overlay.classList.remove("open");
+      panel.classList.remove("open");
+    }
+
+    openBtn.addEventListener("click", openPanel);
+    closeBtn.addEventListener("click", closePanel);
+    overlay.addEventListener("click", closePanel);
+
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       try {
@@ -415,9 +435,11 @@
         preencherSimulacaoComPadroes();
         Dashboard.render(Store.get());
         UI.toast("Configurações salvas");
+        closePanel();
       } catch (err) {
         UI.toast(err.message, true);
       }
+      return false;
     });
 
     return { preencherComConfigAtual };
