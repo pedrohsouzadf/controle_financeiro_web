@@ -29,7 +29,7 @@ var SHEETS = {
 
 // Definição das colunas de cada aba (usadas para criar o cabeçalho automaticamente)
 var COLUMNS = {
-  Receitas: ['id', 'data', 'descricao', 'categoria', 'valor'],
+  Receitas: ['id', 'data', 'descricao', 'categoria', 'valor', 'recorrente'],
   DespesasDiaADia: ['id', 'data', 'descricao', 'categoria', 'valor'],
   GastosFixos: ['id', 'descricao', 'categoria', 'valorMensal', 'diaVencimento', 'ativo'],
   CartaoCredito: ['id', 'data', 'descricao', 'categoria', 'valor', 'cartao', 'parcelaAtual', 'parcelasTotal'],

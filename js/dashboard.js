@@ -18,6 +18,10 @@ const Dashboard = (() => {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   }
 
+  function isRecorrente(r) {
+    return r.recorrente === true || r.recorrente === "true" || r.recorrente === "on";
+  }
+
   function allDespesasDoMes(state, key) {
     const diaADia = state.despesas.filter((d) => monthKey(d.data) === key);
     const cartao = state.cartao.filter((d) => monthKey(d.data) === key);
@@ -31,11 +35,21 @@ const Dashboard = (() => {
       .reduce((sum, f) => sum + (Number(f.valorMensal) || 0), 0);
   }
 
+  // Receitas recorrentes contam em todo mês a partir da data de cadastro.
+  // Receitas não recorrentes contam só no mês exato da data informada.
+  function receitasDoMes(state, key) {
+    return state.receitas
+      .filter((r) => {
+        const rMonth = monthKey(r.data);
+        if (!rMonth) return false;
+        return isRecorrente(r) ? rMonth <= key : rMonth === key;
+      })
+      .reduce((s, r) => s + (Number(r.valor) || 0), 0);
+  }
+
   function renderKpis(state) {
     const key = currentMonthKey();
-    const receitasMes = state.receitas
-      .filter((r) => monthKey(r.data) === key)
-      .reduce((s, r) => s + (Number(r.valor) || 0), 0);
+    const receitasMes = receitasDoMes(state, key);
 
     const { diaADia, cartao } = allDespesasDoMes(state, key);
     const despesasDiaMes = diaADia.reduce((s, d) => s + (Number(d.valor) || 0), 0);
@@ -118,9 +132,7 @@ const Dashboard = (() => {
       months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
     }
 
-    const receitasSerie = months.map((m) =>
-      state.receitas.filter((r) => monthKey(r.data) === m).reduce((s, r) => s + Number(r.valor || 0), 0)
-    );
+    const receitasSerie = months.map((m) => receitasDoMes(state, m));
     const despesasSerie = months.map((m) => {
       const diaADia = state.despesas
         .filter((d) => monthKey(d.data) === m)

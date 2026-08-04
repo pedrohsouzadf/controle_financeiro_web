@@ -33,7 +33,8 @@
         { render: (r) => UI.formatDate(r.data) },
         { field: "descricao" },
         { render: (r) => `<span class="tag">${r.categoria}</span>` },
-        { render: (r) => `<span class="value-in">${UI.formatBRL(r.valor)}</span>` }
+        { render: (r) => `<span class="value-in">${UI.formatBRL(r.valor)}</span>` },
+        { render: (r) => (isRecorrente(r) ? `<span class="tag" style="background:#e6f9ec;color:#1a7f3c;">Recorrente</span>` : "") }
       ],
       async (row) => {
         if (!confirm("Excluir esta receita?")) return;
@@ -164,10 +165,19 @@
     );
   }
 
+  // ---------- HELPERS ----------
+  function isRecorrente(item) {
+    return item.recorrente === true || item.recorrente === "true" || item.recorrente === "on";
+  }
+
   // ---------- FORM HANDLERS ----------
   function formToObject(form) {
     const data = {};
     new FormData(form).forEach((value, key) => (data[key] = value));
+    // Checkboxes não marcados não aparecem no FormData — força valor explícito
+    form.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+      data[cb.name] = cb.checked ? "true" : "false";
+    });
     return data;
   }
 
