@@ -114,7 +114,8 @@
         { render: (r) => `<span class="tag">${r.categoria}</span>` },
         { field: "cartao" },
         { render: (r) => `${r.parcelaAtual || 1}/${r.parcelasTotal || 1}` },
-        { render: (r) => `<span class="value-out">${UI.formatBRL(r.valor)}</span>` }
+        { render: (r) => `<span class="value-out">${UI.formatBRL(r.valor)}</span>` },
+        { render: (r) => (isRecorrente(r) ? `<span class="tag" style="background:#e6f9ec;color:#1a7f3c;">Recorrente</span>` : "") }
       ],
       async (row) => {
         if (!confirm("Excluir este lançamento do cartão?")) return;

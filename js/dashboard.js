@@ -22,9 +22,20 @@ const Dashboard = (() => {
     return r.recorrente === true || r.recorrente === "true" || r.recorrente === "on";
   }
 
+  // Itens do cartão marcados como recorrentes (academia, streaming, seguro...)
+  // contam em todo mês a partir da data de cadastro, igual às receitas fixas.
+  // Itens não recorrentes contam só no mês exato da data informada.
+  function cartaoDoMes(state, key) {
+    return state.cartao.filter((c) => {
+      const cMonth = monthKey(c.data);
+      if (!cMonth) return false;
+      return isRecorrente(c) ? cMonth <= key : cMonth === key;
+    });
+  }
+
   function allDespesasDoMes(state, key) {
     const diaADia = state.despesas.filter((d) => monthKey(d.data) === key);
-    const cartao = state.cartao.filter((d) => monthKey(d.data) === key);
+    const cartao = cartaoDoMes(state, key);
     const fixos = state.fixos.filter((f) => String(f.ativo) !== "false");
     return { diaADia, cartao, fixos };
   }
@@ -54,7 +65,11 @@ const Dashboard = (() => {
     const { diaADia, cartao } = allDespesasDoMes(state, key);
     const despesasDiaMes = diaADia.reduce((s, d) => s + (Number(d.valor) || 0), 0);
     const cartaoMes = cartao.reduce((s, d) => s + (Number(d.valor) || 0), 0);
+    const cartaoRecorrenteMes = cartao
+      .filter(isRecorrente)
+      .reduce((s, d) => s + (Number(d.valor) || 0), 0);
     const fixosMes = totalFixosMensal(state);
+    const gastosFixosTotais = fixosMes + cartaoRecorrenteMes;
     const totalDespesas = despesasDiaMes + cartaoMes + fixosMes;
     const saldo = receitasMes - totalDespesas;
 
@@ -81,7 +96,27 @@ const Dashboard = (() => {
       )
       .join("");
 
-    return { receitasMes, totalDespesas, saldo, totalGuardado, despesasDiaMes, cartaoMes, fixosMes };
+    const fixosEl = document.getElementById("dashboard-fixos-totais");
+    if (fixosEl) {
+      fixosEl.innerHTML = `
+        <div class="kpi-label">Gastos fixos totais (boleto + cartão recorrente)</div>
+        <div class="kpi-value negative">${UI.formatBRL(gastosFixosTotais)}</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">
+          Boleto: ${UI.formatBRL(fixosMes)} · Cartão recorrente: ${UI.formatBRL(cartaoRecorrenteMes)}
+        </div>`;
+    }
+
+    return {
+      receitasMes,
+      totalDespesas,
+      saldo,
+      totalGuardado,
+      despesasDiaMes,
+      cartaoMes,
+      cartaoRecorrenteMes,
+      fixosMes,
+      gastosFixosTotais
+    };
   }
 
   function renderChartCategorias(state) {
@@ -137,9 +172,7 @@ const Dashboard = (() => {
       const diaADia = state.despesas
         .filter((d) => monthKey(d.data) === m)
         .reduce((s, d) => s + Number(d.valor || 0), 0);
-      const cartao = state.cartao
-        .filter((d) => monthKey(d.data) === m)
-        .reduce((s, d) => s + Number(d.valor || 0), 0);
+      const cartao = cartaoDoMes(state, m).reduce((s, d) => s + Number(d.valor || 0), 0);
       return diaADia + cartao + totalFixosMensal(state);
     });
 
@@ -182,9 +215,11 @@ const Dashboard = (() => {
       }
     }
 
-    if (kpis.fixosMes > 0 && kpis.receitasMes > 0) {
-      const pctFixos = ((kpis.fixosMes / kpis.receitasMes) * 100).toFixed(0);
-      insights.push(`📄 Seus gastos fixos representam ${pctFixos}% da sua receita mensal (${UI.formatBRL(kpis.fixosMes)}).`);
+    if (kpis.gastosFixosTotais > 0 && kpis.receitasMes > 0) {
+      const pctFixos = ((kpis.gastosFixosTotais / kpis.receitasMes) * 100).toFixed(0);
+      insights.push(
+        `📄 Seus gastos fixos (boleto + cartão recorrente) representam ${pctFixos}% da sua receita mensal (${UI.formatBRL(kpis.gastosFixosTotais)}).`
+      );
     }
 
     // categoria com maior gasto
