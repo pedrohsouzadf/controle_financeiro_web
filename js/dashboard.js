@@ -33,7 +33,8 @@ const Dashboard = (() => {
   // (VA, CAJU, etc.) é tratado como pago por um benefício, não por dinheiro real.
   function isContaCorrente(item) {
     const fonte = (item.fonte || "").trim().toLowerCase();
-    return !fonte || fonte === "conta corrente" || fonte === "contacorrente";
+    const dinheiro = ["", "conta corrente", "contacorrente", "débito", "debito", "cartão de crédito", "cartao de credito"];
+    return dinheiro.includes(fonte);
   }
 
   // Itens do cartão marcados como recorrentes (academia, streaming, seguro...)
@@ -195,7 +196,7 @@ const Dashboard = (() => {
 
     el.style.display = "block";
     el.innerHTML = `
-      <h3>Saldo por benefício (VA, CAJU, etc.)</h3>
+      <h3 style="text-transform:uppercase;">Benefícios - CAJU e VA</h3>
       <div class="grid cols-3">
         ${fontes
           .map(
@@ -203,9 +204,8 @@ const Dashboard = (() => {
           <div>
             <div class="kpi-label">${f.nome}</div>
             <div class="kpi-value ${f.saldo >= 0 ? "positive" : "negative"}">${UI.formatBRL(f.saldo)}</div>
-            <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">
-              Recebido: ${UI.formatBRL(f.recebido)} · Gasto: ${UI.formatBRL(f.gasto)}
-            </div>
+            <div style="font-size:12px; color:var(--text-muted); margin-top:6px;">Recebido: ${UI.formatBRL(f.recebido)}</div>
+            <div style="font-size:20px; font-weight:700; color:var(--red); margin-top:2px;">Gasto: ${UI.formatBRL(f.gasto)}</div>
           </div>`
           )
           .join("")}

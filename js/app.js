@@ -31,9 +31,55 @@
     if (el) el.textContent = UI.formatBRL(value);
   }
 
+  // ---------- FILTRO POR MÊS ----------
+  // Estado do filtro selecionado em cada aba ("todos" ou "YYYY-MM").
+  const filtroMes = { receitas: "todos", despesas: "todos", fixos: "todos", cartao: "todos", poupanca: "todos" };
+  const NOMES_MES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+  function mesesDisponiveis(rows, field) {
+    const meses = new Set();
+    rows.forEach((r) => {
+      const v = r[field];
+      if (v && /^\d{4}-\d{2}/.test(String(v))) meses.add(String(v).substring(0, 7));
+    });
+    return [...meses].sort().reverse();
+  }
+
+  function formatarMesLabel(mesKey) {
+    const [y, m] = mesKey.split("-");
+    return `${NOMES_MES[Number(m) - 1]}/${y}`;
+  }
+
+  // Popula o <select> de filtro de mês de uma aba com os meses realmente
+  // presentes nos dados, preservando a seleção atual quando possível.
+  function popularFiltroMes(selectId, rows, field, filtroKey, onChange) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    const meses = mesesDisponiveis(rows, field);
+    const atual = filtroMes[filtroKey];
+    const valorSelecionado = meses.includes(atual) ? atual : "todos";
+    select.innerHTML =
+      `<option value="todos">Todos os meses</option>` +
+      meses.map((m) => `<option value="${m}">${formatarMesLabel(m)}</option>`).join("");
+    select.value = valorSelecionado;
+    filtroMes[filtroKey] = valorSelecionado;
+    select.onchange = () => {
+      filtroMes[filtroKey] = select.value;
+      onChange();
+    };
+  }
+
+  function filtrarPorMes(rows, field, filtroKey) {
+    const mes = filtroMes[filtroKey];
+    if (mes === "todos") return rows;
+    return rows.filter((r) => String(r[field] || "").startsWith(mes));
+  }
+
   // ---------- RECEITAS ----------
   function renderReceitas() {
-    const rows = UI.sortByDateDesc(Store.get().receitas);
+    const all = UI.sortByDateDesc(Store.get().receitas);
+    popularFiltroMes("filtro-mes-receitas", all, "data", "receitas", renderReceitas);
+    const rows = filtrarPorMes(all, "data", "receitas");
     setTabTotal("total-receitas-tab", rows.reduce((s, r) => s + Number(r.valor || 0), 0));
     UI.renderTable(
       document.querySelector("#table-receitas tbody"),
@@ -73,9 +119,27 @@
   }
 
   // ---------- DESPESAS DIA A DIA ----------
+  // Mostra, no cabeçalho da aba, o total gasto em cada categoria (dentro do
+  // filtro de mês aplicado), como pílulas ordenadas do maior para o menor gasto.
+  function renderDespesasPorCategoria(rows) {
+    const el = document.getElementById("despesas-por-categoria");
+    if (!el) return;
+    const porCategoria = {};
+    rows.forEach((r) => {
+      porCategoria[r.categoria] = (porCategoria[r.categoria] || 0) + Number(r.valor || 0);
+    });
+    const entradas = Object.entries(porCategoria).sort((a, b) => b[1] - a[1]);
+    el.innerHTML = entradas.length
+      ? entradas.map(([cat, val]) => `<span class="tag">${cat}: ${UI.formatBRL(val)}</span>`).join("")
+      : "";
+  }
+
   function renderDespesas() {
-    const rows = UI.sortByDateDesc(Store.get().despesas);
+    const all = UI.sortByDateDesc(Store.get().despesas);
+    popularFiltroMes("filtro-mes-despesas", all, "data", "despesas", renderDespesas);
+    const rows = filtrarPorMes(all, "data", "despesas");
     setTabTotal("total-despesas-tab", rows.reduce((s, r) => s + Number(r.valor || 0), 0));
+    renderDespesasPorCategoria(rows);
     UI.renderTable(
       document.querySelector("#table-despesas tbody"),
       rows,
@@ -108,8 +172,26 @@
   }
 
   // ---------- GASTOS FIXOS ----------
+  // Mostra, no cabeçalho da aba, o total mensal por fonte de pagamento
+  // (CAJU, VA, Conta corrente, Cartão de crédito) como pílulas.
+  function renderFixosPorFonte(rows) {
+    const el = document.getElementById("fixos-por-fonte");
+    if (!el) return;
+    const porFonte = {};
+    rows.forEach((r) => {
+      const fonte = r.fonte && r.fonte !== "—" ? r.fonte : "Conta corrente";
+      porFonte[fonte] = (porFonte[fonte] || 0) + Number(r.valorMensal || 0);
+    });
+    const entradas = Object.entries(porFonte).sort((a, b) => b[1] - a[1]);
+    el.innerHTML = entradas.length
+      ? entradas.map(([fonte, val]) => `<span class="tag">${fonte}: ${UI.formatBRL(val)}</span>`).join("")
+      : "";
+  }
+
   // Combina os gastos fixos por boleto com as assinaturas recorrentes do
   // cartão de crédito numa única lista, já que ambos são compromissos fixos.
+  // O filtro de mês só se aplica às assinaturas do cartão (que têm data de
+  // cadastro) — os boletos são compromissos contínuos, sem mês específico.
   function renderFixos() {
     const state = Store.get();
     const boletos = state.fixos.map((f) => ({
@@ -120,16 +202,21 @@
       fonte: f.fonte || "Conta corrente",
       vencimentoLabel: `Dia ${f.diaVencimento}`
     }));
-    const cartaoRecorrentes = state.cartao.filter(isRecorrente).map((c) => ({
+    const cartaoRecorrentesTodos = state.cartao.filter(isRecorrente).map((c) => ({
       ...c,
       origem: "cartao",
       valorMensal: c.valor,
       formaPagamento: c.cartao ? `Cartão (${c.cartao})` : "Cartão de crédito",
-      fonte: "—",
+      fonte: "Cartão de crédito",
       vencimentoLabel: "—"
     }));
+
+    popularFiltroMes("filtro-mes-fixos", cartaoRecorrentesTodos, "data", "fixos", renderFixos);
+    const cartaoRecorrentes = filtrarPorMes(cartaoRecorrentesTodos, "data", "fixos");
+
     const rows = [...boletos, ...cartaoRecorrentes];
     setTabTotal("total-fixos-tab", rows.reduce((s, r) => s + Number(r.valorMensal || 0), 0));
+    renderFixosPorFonte(rows);
 
     UI.renderTable(
       document.querySelector("#table-fixos tbody"),
@@ -181,7 +268,9 @@
 
   // ---------- CARTÃO DE CRÉDITO ----------
   function renderCartao() {
-    const rows = UI.sortByDateDesc(Store.get().cartao);
+    const all = UI.sortByDateDesc(Store.get().cartao);
+    popularFiltroMes("filtro-mes-cartao", all, "data", "cartao", renderCartao);
+    const rows = filtrarPorMes(all, "data", "cartao");
     setTabTotal("total-cartao-tab", rows.reduce((s, r) => s + Number(r.valor || 0), 0));
     UI.renderTable(
       document.querySelector("#table-cartao tbody"),
@@ -231,9 +320,14 @@
   }
 
   function renderPoupanca() {
-    const rows = UI.sortByDateDesc(Store.get().poupanca);
+    const all = UI.sortByDateDesc(Store.get().poupanca);
+    popularFiltroMes("filtro-mes-poupanca", all, "data", "poupanca", renderPoupanca);
+    const rows = filtrarPorMes(all, "data", "poupanca");
     const depositos = rows.filter((p) => p.tipo === "deposito").reduce((s, p) => s + Number(p.valor || 0), 0);
     const retiradas = rows.filter((p) => p.tipo === "retirada").reduce((s, p) => s + Number(p.valor || 0), 0);
+    // "Total guardado" continua sendo o saldo acumulado real (não filtrado por
+    // mês) — o filtro aqui só afeta a lista de movimentações e os totais de
+    // depósitos/retiradas exibidos.
     document.getElementById("poupanca-total").textContent = UI.formatBRL(totalGuardadoAtual());
     document.getElementById("poupanca-depositos").textContent = UI.formatBRL(depositos);
     document.getElementById("poupanca-retiradas").textContent = UI.formatBRL(retiradas);

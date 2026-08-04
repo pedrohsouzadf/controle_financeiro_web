@@ -58,7 +58,10 @@
   <section id="view-receitas" class="view">
     <div class="section-title-row">
       <div class="section-title">Receitas</div>
-      <div class="kpi-value" id="total-receitas-tab" style="font-size:18px;">R$ 0,00</div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <select id="filtro-mes-receitas" style="width:auto;"></select>
+        <div class="kpi-value" id="total-receitas-tab" style="font-size:18px;">R$ 0,00</div>
+      </div>
     </div>
     <div class="card">
       <h3>Adicionar receita</h3>
@@ -101,8 +104,12 @@
   <section id="view-despesas" class="view">
     <div class="section-title-row">
       <div class="section-title">Despesas do dia a dia</div>
-      <div class="kpi-value" id="total-despesas-tab" style="font-size:18px;">R$ 0,00</div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <select id="filtro-mes-despesas" style="width:auto;"></select>
+        <div class="kpi-value" id="total-despesas-tab" style="font-size:18px;">R$ 0,00</div>
+      </div>
     </div>
+    <div id="despesas-por-categoria" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;"></div>
     <div class="card">
       <h3>Adicionar despesa</h3>
       <form class="inline-form" id="form-despesas">
@@ -134,11 +141,16 @@
         <div><label>Valor (R$)</label><input type="number" step="0.01" name="valor" required placeholder="0,00" /></div>
         <div>
           <label>Fonte de pagamento</label>
-          <input type="text" name="fonte" list="fontes-sugeridas" placeholder="Conta corrente" />
+          <select name="fonte">
+            <option>Débito</option>
+            <option>Cartão de crédito</option>
+            <option>VA</option>
+            <option>CAJU</option>
+          </select>
         </div>
         <div><button class="btn" type="submit">Adicionar</button></div>
       </form>
-      <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Deixe em branco para "Conta corrente", ou informe o benefício usado (ex: VA, CAJU) — assim o gasto entra no saldo daquele benefício em vez do seu saldo real.</p>
+      <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">"Débito" e "Cartão de crédito" contam como dinheiro de verdade no seu saldo. "VA" e "CAJU" entram no saldo daquele benefício, não no seu saldo real.</p>
       <table id="table-despesas">
         <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Fonte</th><th>Valor</th><th></th></tr></thead>
         <tbody></tbody>
@@ -146,18 +158,16 @@
     </div>
   </section>
 
-  <datalist id="fontes-sugeridas">
-    <option value="Conta corrente"></option>
-    <option value="VA"></option>
-    <option value="CAJU"></option>
-  </datalist>
-
   <!-- ===================== GASTOS FIXOS ===================== -->
   <section id="view-fixos" class="view">
     <div class="section-title-row">
       <div class="section-title">Gastos Fixos</div>
-      <div class="kpi-value" id="total-fixos-tab" style="font-size:18px;">R$ 0,00</div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <select id="filtro-mes-fixos" style="width:auto;"></select>
+        <div class="kpi-value" id="total-fixos-tab" style="font-size:18px;">R$ 0,00</div>
+      </div>
     </div>
+    <div id="fixos-por-fonte" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;"></div>
     <div class="card">
       <h3>Adicionar gasto fixo pago por boleto</h3>
       <form class="inline-form" id="form-fixos">
@@ -189,11 +199,16 @@
         <div><label>Dia de vencimento</label><input type="number" min="1" max="31" name="diaVencimento" required placeholder="Ex: 10" /></div>
         <div>
           <label>Fonte de pagamento</label>
-          <input type="text" name="fonte" list="fontes-sugeridas" placeholder="Conta corrente" />
+          <select name="fonte">
+            <option>Conta corrente</option>
+            <option>VA</option>
+            <option>CAJU</option>
+            <option>Cartão de crédito</option>
+          </select>
         </div>
         <div><button class="btn" type="submit">Adicionar</button></div>
       </form>
-      <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Assinaturas fixas cobradas no cartão (academia, streaming, seguro) não são cadastradas aqui — marque "Recorrente" na aba <strong>Cartão de crédito</strong> e elas aparecem automaticamente nesta lista também. Na "Fonte de pagamento", deixe em branco para "Conta corrente" ou informe o benefício usado (ex: CAJU).</p>
+      <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Assinaturas fixas cobradas no cartão (academia, streaming, seguro) não são cadastradas aqui — marque "Recorrente" na aba <strong>Cartão de crédito</strong> e elas aparecem automaticamente nesta lista também.</p>
       <table id="table-fixos">
         <thead><tr><th>Descrição</th><th>Categoria</th><th>Forma de pagamento</th><th>Fonte</th><th>Valor mensal</th><th>Vencimento</th><th></th></tr></thead>
         <tbody></tbody>
@@ -205,7 +220,10 @@
   <section id="view-cartao" class="view">
     <div class="section-title-row">
       <div class="section-title">Cartão de crédito</div>
-      <div class="kpi-value" id="total-cartao-tab" style="font-size:18px;">R$ 0,00</div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <select id="filtro-mes-cartao" style="width:auto;"></select>
+        <div class="kpi-value" id="total-cartao-tab" style="font-size:18px;">R$ 0,00</div>
+      </div>
     </div>
     <div class="card">
       <h3>Adicionar gasto no cartão</h3>
@@ -257,7 +275,10 @@
   <section id="view-poupanca" class="view">
     <div class="section-title-row">
       <div class="section-title">Poupança</div>
-      <button type="button" class="icon-btn" id="btn-open-poupanca-config" title="Configurações" aria-label="Configurações">⚙️</button>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <select id="filtro-mes-poupanca" style="width:auto;"></select>
+        <button type="button" class="icon-btn" id="btn-open-poupanca-config" title="Configurações" aria-label="Configurações">⚙️</button>
+      </div>
     </div>
 
     <div class="grid cols-3">
