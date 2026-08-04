@@ -1,31 +1,36 @@
 // ==========================================================
-// Camada de comunicação com o Google Apps Script (API)
+// Camada de comunicação com a API (AWS: API Gateway + Lambda)
 // ==========================================================
 
 const Api = (() => {
   const isConfigured = () =>
     typeof API_URL === "string" &&
     API_URL.startsWith("http") &&
-    !API_URL.includes("COLE_AQUI");
+    !API_URL.includes("COLE_AQUI") &&
+    typeof API_KEY === "string" &&
+    !API_KEY.includes("COLE_AQUI");
+
+  function headers(extra = {}) {
+    return { "x-api-key": API_KEY, ...extra };
+  }
 
   async function getAll() {
-    if (!isConfigured()) throw new Error("API_URL não configurada");
-    const res = await fetch(`${API_URL}?action=all`, { method: "GET" });
+    if (!isConfigured()) throw new Error("API_URL/API_KEY não configurados");
+    const res = await fetch(API_URL, { method: "GET", headers: headers() });
     const json = await res.json();
-    if (!json.ok) throw new Error(json.error || "Erro ao buscar dados");
+    if (!res.ok || !json.ok) throw new Error(json.error || "Erro ao buscar dados");
     return json;
   }
 
   async function post(body) {
-    if (!isConfigured()) throw new Error("API_URL não configurada");
+    if (!isConfigured()) throw new Error("API_URL/API_KEY não configurados");
     const res = await fetch(API_URL, {
       method: "POST",
-      // text/plain evita o preflight CORS que o Apps Script não trata bem
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      headers: headers({ "Content-Type": "application/json" }),
       body: JSON.stringify(body)
     });
     const json = await res.json();
-    if (!json.ok) throw new Error(json.error || "Erro na operação");
+    if (!res.ok || !json.ok) throw new Error(json.error || "Erro na operação");
     return json;
   }
 

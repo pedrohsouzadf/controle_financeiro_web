@@ -1,10 +1,13 @@
 // ==========================================================
-// CONFIGURAÇÃO — cole aqui a URL do seu Google Apps Script
+// CONFIGURAÇÃO — cole aqui os dados da sua API na AWS
 // ==========================================================
-// Depois de implantar o Code.gs como "App da Web" no Google Apps Script,
-// copie a URL gerada (termina em /exec) e cole abaixo, entre aspas.
+// Depois de rodar "sam deploy" (veja o README), copie os valores de
+// saída (Outputs) do terminal e cole abaixo:
 //
-// Exemplo:
-// const API_URL = "https://script.google.com/macros/s/AKfycb.../exec";
+// - API_URL: a URL "ApiUrl" que aparece no output do deploy
+//   Exemplo: "https://abc123xyz.execute-api.us-east-1.amazonaws.com/data"
+// - API_KEY: a mesma chave que você digitou no "sam deploy --guided"
+//   quando ele perguntou "ApiKeyValue"
 
-const API_URL = "https://script.google.com/macros/s/AKfycbwVOI8a1ZgEZIAoRYzjSNrSFBFCYYgRbxjhRSiyi_l-k73gOalKmF6N-zRoIF8KiuDXZQ/exec";
+const API_URL = "https://75gic83oi8.execute-api.us-east-1.amazonaws.com/data";
+const API_KEY = "6d09fe7f067a83d12294a5f9e2ba3264aa4b42ca1b9f8a8b";
