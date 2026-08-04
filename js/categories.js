@@ -19,6 +19,14 @@ const Categories = (() => {
       label: "Investimentos",
       percentAlvo: 20,
       categorias: ["Dívidas/Financiamento", "Reserva de Emergência", "Investimentos"]
+    },
+    // Gastos pontuais e fora do padrão (mudança, reforma, um imprevisto grande)
+    // — não são dia a dia nem fixos, e não devem contar nos tetos do 50/30/20,
+    // por isso ficam num grupo à parte, com percentAlvo 0.
+    extraordinarios: {
+      label: "Gastos Extraordinários",
+      percentAlvo: 0,
+      categorias: ["Gastos Extraordinários"]
     }
   };
 

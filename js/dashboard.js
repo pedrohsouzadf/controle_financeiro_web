@@ -216,11 +216,14 @@ const Dashboard = (() => {
   // receitas do mês (renda + benefícios), seguindo a regra 50/30/20.
   // O grupo "Futuro" também soma os depósitos de poupança feitos no mês,
   // já que investir é justamente o objetivo desse grupo.
+  // O grupo "Gastos Extraordinários" fica de fora do painel de orçamento —
+  // são gastos pontuais (mudança, imprevistos) que não devem contar nos
+  // tetos do 50/30/20, então são somados à parte (ver extraordinariosDoMes).
   function orcamentoPorGrupo(state, key) {
     const totalReceitas = receitasDoMes(state, key);
     const { diaADia, cartao, fixos } = allDespesasDoMes(state, key);
 
-    const gastoPorGrupo = { necessidades: 0, desejos: 0, futuro: 0 };
+    const gastoPorGrupo = { necessidades: 0, desejos: 0, futuro: 0, extraordinarios: 0 };
     [...diaADia, ...cartao].forEach((d) => {
       const grupo = Categories.grupoDaCategoria(d.categoria);
       gastoPorGrupo[grupo] += Number(d.valor || 0);
@@ -239,13 +242,26 @@ const Dashboard = (() => {
     // definido pelo usuário (R$ 1.100), em vez do percentual sobre a renda.
     const TETO_FIXO_INVESTIMENTOS = 1100;
 
-    return Object.entries(Categories.CATEGORY_GROUPS).map(([grupoKey, g]) => ({
-      key: grupoKey,
-      label: g.label,
-      percentAlvo: g.percentAlvo,
-      teto: grupoKey === "futuro" ? TETO_FIXO_INVESTIMENTOS : totalReceitas * (g.percentAlvo / 100),
-      realizado: gastoPorGrupo[grupoKey] || 0
-    }));
+    return Object.entries(Categories.CATEGORY_GROUPS)
+      .filter(([grupoKey]) => grupoKey !== "extraordinarios")
+      .map(([grupoKey, g]) => ({
+        key: grupoKey,
+        label: g.label,
+        percentAlvo: g.percentAlvo,
+        teto: grupoKey === "futuro" ? TETO_FIXO_INVESTIMENTOS : totalReceitas * (g.percentAlvo / 100),
+        realizado: gastoPorGrupo[grupoKey] || 0
+      }));
+  }
+
+  // Total gasto em "Gastos Extraordinários" no mês — mostrado à parte, sem
+  // teto, já que são gastos pontuais fora do orçamento normal.
+  function extraordinariosDoMes(state, key) {
+    const { diaADia, cartao, fixos } = allDespesasDoMes(state, key);
+    const ehExtraordinario = (item) => Categories.grupoDaCategoria(item.categoria) === "extraordinarios";
+    const totalDiaADia = diaADia.filter(ehExtraordinario).reduce((s, d) => s + Number(d.valor || 0), 0);
+    const totalCartao = cartao.filter(ehExtraordinario).reduce((s, d) => s + Number(d.valor || 0), 0);
+    const totalFixos = fixos.filter(ehExtraordinario).reduce((s, f) => s + Number(f.valorMensal || 0), 0);
+    return totalDiaADia + totalCartao + totalFixos;
   }
 
   function renderOrcamentoGrupos(state) {
@@ -412,6 +428,13 @@ const Dashboard = (() => {
 
     if (kpis.totalGuardado > 0) {
       insights.push(`🏦 Você já tem ${UI.formatBRL(kpis.totalGuardado)} guardados. Continue assim!`);
+    }
+
+    const extraordinariosMes = extraordinariosDoMes(state, key);
+    if (extraordinariosMes > 0) {
+      insights.push(
+        `🏗️ Você teve ${UI.formatBRL(extraordinariosMes)} em gastos extraordinários este mês (categoria "Gastos Extraordinários") — esse valor não conta nos tetos do orçamento 50/30/20.`
+      );
     }
 
     if (!insights.length) {

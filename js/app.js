@@ -75,6 +75,34 @@
     return rows.filter((r) => String(r[field] || "").startsWith(mes));
   }
 
+  // ---------- FILTRO POR GRUPO (Necessidades/Desejos/Investimentos/Extraordinários) ----------
+  // Estado do filtro de grupo selecionado em cada aba ("todos" ou a chave do
+  // grupo em Categories.CATEGORY_GROUPS).
+  const filtroGrupo = { despesas: "todos", fixos: "todos", cartao: "todos" };
+
+  // As opções são fixas (vêm de Categories.CATEGORY_GROUPS), então só
+  // preenchemos o <select> uma vez — não precisa recriar a cada render.
+  function popularFiltroGrupo(selectId, filtroKey, onChange) {
+    const select = document.getElementById(selectId);
+    if (!select || select.dataset.populated) return;
+    select.dataset.populated = "true";
+    const opcoes = Object.entries(Categories.CATEGORY_GROUPS)
+      .map(([key, g]) => `<option value="${key}">${g.label}</option>`)
+      .join("");
+    select.innerHTML = `<option value="todos">Todos os grupos</option>${opcoes}`;
+    select.value = filtroGrupo[filtroKey];
+    select.onchange = () => {
+      filtroGrupo[filtroKey] = select.value;
+      onChange();
+    };
+  }
+
+  function filtrarPorGrupo(rows, filtroKey) {
+    const grupo = filtroGrupo[filtroKey];
+    if (grupo === "todos") return rows;
+    return rows.filter((r) => Categories.grupoDaCategoria(r.categoria) === grupo);
+  }
+
   // ---------- RECEITAS ----------
   function renderReceitas() {
     const all = UI.sortByDateDesc(Store.get().receitas);
@@ -139,7 +167,8 @@
   function renderDespesas() {
     const all = UI.sortByDateDesc(Store.get().despesas);
     popularFiltroMes("filtro-mes-despesas", all, "data", "despesas", renderDespesas);
-    const rows = filtrarPorMes(all, "data", "despesas");
+    popularFiltroGrupo("filtro-grupo-despesas", "despesas", renderDespesas);
+    const rows = filtrarPorGrupo(filtrarPorMes(all, "data", "despesas"), "despesas");
     setTabTotal("total-despesas-tab", rows.reduce((s, r) => s + Number(r.valor || 0), 0));
     renderDespesasPorFonte(rows);
     UI.renderTable(
@@ -214,9 +243,10 @@
     }));
 
     popularFiltroMes("filtro-mes-fixos", cartaoRecorrentesTodos, "data", "fixos", renderFixos);
+    popularFiltroGrupo("filtro-grupo-fixos", "fixos", renderFixos);
     const cartaoRecorrentes = filtrarPorMes(cartaoRecorrentesTodos, "data", "fixos");
 
-    const rows = [...boletos, ...cartaoRecorrentes];
+    const rows = filtrarPorGrupo([...boletos, ...cartaoRecorrentes], "fixos");
     setTabTotal("total-fixos-tab", rows.reduce((s, r) => s + Number(r.valorMensal || 0), 0));
     renderFixosPorFonte(rows);
 
@@ -272,7 +302,8 @@
   function renderCartao() {
     const all = UI.sortByDateDesc(Store.get().cartao);
     popularFiltroMes("filtro-mes-cartao", all, "data", "cartao", renderCartao);
-    const rows = filtrarPorMes(all, "data", "cartao");
+    popularFiltroGrupo("filtro-grupo-cartao", "cartao", renderCartao);
+    const rows = filtrarPorGrupo(filtrarPorMes(all, "data", "cartao"), "cartao");
     setTabTotal("total-cartao-tab", rows.reduce((s, r) => s + Number(r.valor || 0), 0));
     UI.renderTable(
       document.querySelector("#table-cartao tbody"),

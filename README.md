@@ -118,6 +118,67 @@ git push
 
 ---
 
+## Passo 6 — Lembrete diário no WhatsApp (opcional)
+
+Todo dia às 20h (horário de Brasília), uma Lambda separada (`aws/lambda/lembrete.mjs`) calcula seu saldo real do mês direto do DynamoDB e te manda uma mensagem de WhatsApp avisando o saldo e se você já lançou despesas hoje. Ela é disparada por um agendamento do EventBridge — nenhuma dependência de biblioteca não-oficial, é tudo API oficial da Meta (WhatsApp Cloud API).
+
+### 6.1 — Criar o template da mensagem
+
+No [WhatsApp Manager](https://business.facebook.com/wa/manage/message-templates/) do seu app Meta, crie um template novo:
+
+- **Nome**: `lembrete_financas_diario` (tem que bater com o nome usado no template.yaml)
+- **Categoria**: Utility (utilidade) — evita o preço mais caro de "Marketing"
+- **Idioma**: Português (BR)
+- **Corpo da mensagem**, com duas variáveis:
+
+```
+Boa noite! 💰 Seu saldo real do mês é {{1}}. Você já lançou suas despesas de hoje? {{2}}. Não esqueça de revisar seu sistema de finanças.
+```
+
+A aprovação da Meta costuma sair em minutos a poucas horas.
+
+### 6.2 — Guardar o token de acesso no SSM Parameter Store
+
+Pegue o **token de acesso** do seu app no painel da Meta (WhatsApp > Configuração da API) e salve com:
+
+```bash
+aws ssm put-parameter --name "/financas/whatsapp-token" --type SecureString --value "SEU_TOKEN_DE_ACESSO"
+```
+
+> Se você estiver usando o número de teste gratuito da Meta, o token padrão expira em 24h. Para o lembrete não parar de funcionar sozinho, gere um **token permanente** criando um "System User" no Business Manager (Configurações do negócio > Usuários do sistema) e atribuindo a ele o app do WhatsApp — aí você gera um token sem validade.
+>
+> Também é preciso cadastrar seu número como "destinatário de teste" no painel da Meta (WhatsApp > Introdução > "To"), senão as mensagens não chegam.
+
+### 6.3 — Fazer o deploy com os novos parâmetros
+
+Como esse recurso adiciona parâmetros novos ao `template.yaml`, rode o deploy no modo guiado de novo (ele reaproveita as respostas anteriores como padrão, então é só apertar Enter nas que não mudaram):
+
+```bash
+cd aws
+sam build
+sam deploy --guided
+```
+
+Quando perguntar, informe:
+- **WhatsAppPhoneNumberId**: o "Phone number ID" do painel da Meta (WhatsApp > Introdução)
+- **WhatsAppRecipientNumber**: seu número, formato internacional sem símbolos (ex: `5561999999999`)
+- **WhatsAppTemplateName**: pode deixar o padrão `lembrete_financas_diario`
+- **WhatsAppTokenParamName**: pode deixar o padrão `/financas/whatsapp-token`
+
+### 6.4 — Testar sem esperar o horário
+
+```bash
+aws lambda invoke --function-name $(aws cloudformation describe-stack-resources --stack-name meu-financeiro --logical-resource-id LembreteFunction --query "StackResources[0].PhysicalResourceId" --output text) /tmp/saida.json && cat /tmp/saida.json
+```
+
+Se der erro, o `cat /tmp/saida.json` mostra a mensagem — os erros mais comuns são token expirado, número de destinatário não cadastrado como testador, ou nome do template diferente do que foi aprovado.
+
+### Custo
+
+Mensagens de categoria "Utility" no Brasil custam cerca de R$ 0,035 cada — um lembrete diário sai por menos de R$ 1,10/mês. Se você estiver usando o número de teste gratuito da Meta (só para os números cadastrados como testador), pode não ser cobrado; confirme o status de cobrança do seu app no painel da Meta.
+
+---
+
 ## Atualizando o backend depois
 
 Sempre que você editar `aws/lambda/index.mjs` ou `aws/template.yaml`, rode de novo dentro da pasta `aws`:
@@ -147,7 +208,8 @@ financas-app/
 └── aws/
     ├── template.yaml          # Infraestrutura como código (AWS SAM)
     └── lambda/
-        ├── index.mjs           # Função Lambda (API: all/add/delete/update/setConfig)
+        ├── index.mjs           # Função Lambda da API (all/add/delete/update/setConfig)
+        ├── lembrete.mjs        # Função Lambda do lembrete diário no WhatsApp
         └── package.json        # Dependências da Lambda (AWS SDK v3)
 ```
 
@@ -155,7 +217,7 @@ financas-app/
 
 A tabela `meu-financeiro` usa single-table design:
 
-- **Partition key (`pk`)**: o tipo do item — `RECEITAS`, `DESPESAS`, `FIXOS`, `CARTAO`, `POUPANCA` ou `CONFIG`.
+- **Partition key (`pk`)**: o tipo do item — `RECEITAS`, `DESPESAS`, `FIXOS`, `CARTAO`, `POUPANCA`, `QUITACAO` ou `CONFIG`.
 - **Sort key (`sk`)**: o `id` do item (ou a chave de configuração, no caso de `CONFIG`).
 
 Isso permite buscar todos os itens de um tipo com uma única `Query` (rápido e barato), em vez de varrer a tabela inteira.
