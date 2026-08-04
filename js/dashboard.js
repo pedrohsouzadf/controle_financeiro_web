@@ -117,10 +117,10 @@ const Dashboard = (() => {
     const metaInvestimentoMensal = Number(state.config.metaInvestimentoMensal || 0);
 
     const kpis = [
-      { label: "Receitas do mês (renda)", value: receitasRendaMes, cls: "positive" },
-      { label: "Despesas do mês (conta corrente)", value: despesasContaCorrenteMes, cls: "negative" },
-      { label: "Saldo do mês", value: saldo, cls: saldo >= 0 ? "positive" : "negative" },
-      { label: "Total guardado", value: totalGuardado, cls: "" }
+      { label: "Total receitas - renda", value: receitasRendaMes, cls: "positive" },
+      { label: "Gastos - dinheiro", value: despesasContaCorrenteMes, cls: "negative" },
+      { label: "Saldo (dinheiro)", value: saldo, cls: saldo >= 0 ? "positive" : "negative" },
+      { label: "Gastos fixos totais", value: gastosFixosTotais, cls: "negative" }
     ];
 
     const el = document.getElementById("dashboard-kpis");
@@ -128,21 +128,11 @@ const Dashboard = (() => {
       .map(
         (k) => `
       <div class="card">
-        <div class="kpi-label">${k.label}</div>
+        <div class="kpi-label" style="text-transform:uppercase;">${k.label}</div>
         <div class="kpi-value ${k.cls}">${UI.formatBRL(k.value)}</div>
       </div>`
       )
       .join("");
-
-    const fixosEl = document.getElementById("dashboard-fixos-totais");
-    if (fixosEl) {
-      fixosEl.innerHTML = `
-        <div class="kpi-label">Gastos fixos totais (boleto + cartão recorrente)</div>
-        <div class="kpi-value negative">${UI.formatBRL(gastosFixosTotais)}</div>
-        <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">
-          Boleto: ${UI.formatBRL(fixosMes)} · Cartão recorrente: ${UI.formatBRL(cartaoRecorrenteMes)}
-        </div>`;
-    }
 
     return {
       receitasMes,
