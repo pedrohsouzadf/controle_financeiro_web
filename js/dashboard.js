@@ -22,6 +22,20 @@ const Dashboard = (() => {
     return r.recorrente === true || r.recorrente === "true" || r.recorrente === "on";
   }
 
+  // Receitas sem "tipo" definido (cadastradas antes dessa opção existir) são
+  // tratadas como "renda" por padrão.
+  function tipoReceita(r) {
+    return r.tipo === "beneficio" ? "beneficio" : "renda";
+  }
+
+  // Uma despesa/gasto fixo é "conta corrente" se não tiver fonte definida ou
+  // se a fonte for explicitamente "Conta corrente". Qualquer outro valor
+  // (VA, CAJU, etc.) é tratado como pago por um benefício, não por dinheiro real.
+  function isContaCorrente(item) {
+    const fonte = (item.fonte || "").trim().toLowerCase();
+    return !fonte || fonte === "conta corrente" || fonte === "contacorrente";
+  }
+
   // Itens do cartão marcados como recorrentes (academia, streaming, seguro...)
   // contam em todo mês a partir da data de cadastro, igual às receitas fixas.
   // Itens não recorrentes contam só no mês exato da data informada.
@@ -40,19 +54,22 @@ const Dashboard = (() => {
     return { diaADia, cartao, fixos };
   }
 
-  function totalFixosMensal(state) {
+  function totalFixosMensal(state, { apenasContaCorrente = false } = {}) {
     return state.fixos
       .filter((f) => String(f.ativo) !== "false")
+      .filter((f) => !apenasContaCorrente || isContaCorrente(f))
       .reduce((sum, f) => sum + (Number(f.valorMensal) || 0), 0);
   }
 
   // Receitas recorrentes contam em todo mês a partir da data de cadastro.
   // Receitas não recorrentes contam só no mês exato da data informada.
-  function receitasDoMes(state, key) {
+  // "tipo" filtra por 'renda' ou 'beneficio'; sem filtro, soma tudo.
+  function receitasDoMes(state, key, tipo = null) {
     return state.receitas
       .filter((r) => {
         const rMonth = monthKey(r.data);
         if (!rMonth) return false;
+        if (tipo && tipoReceita(r) !== tipo) return false;
         return isRecorrente(r) ? rMonth <= key : rMonth === key;
       })
       .reduce((s, r) => s + (Number(r.valor) || 0), 0);
@@ -60,18 +77,34 @@ const Dashboard = (() => {
 
   function renderKpis(state) {
     const key = currentMonthKey();
-    const receitasMes = receitasDoMes(state, key);
+
+    const receitasRendaMes = receitasDoMes(state, key, "renda");
+    const receitasBeneficioMes = receitasDoMes(state, key, "beneficio");
+    const receitasMes = receitasRendaMes + receitasBeneficioMes;
 
     const { diaADia, cartao } = allDespesasDoMes(state, key);
     const despesasDiaMes = diaADia.reduce((s, d) => s + (Number(d.valor) || 0), 0);
+    const despesasDiaContaCorrenteMes = diaADia
+      .filter(isContaCorrente)
+      .reduce((s, d) => s + (Number(d.valor) || 0), 0);
+
     const cartaoMes = cartao.reduce((s, d) => s + (Number(d.valor) || 0), 0);
     const cartaoRecorrenteMes = cartao
       .filter(isRecorrente)
       .reduce((s, d) => s + (Number(d.valor) || 0), 0);
+
     const fixosMes = totalFixosMensal(state);
+    const fixosContaCorrenteMes = totalFixosMensal(state, { apenasContaCorrente: true });
     const gastosFixosTotais = fixosMes + cartaoRecorrenteMes;
+
+    // Total gasto de fato (todas as fontes) — só para referência/insights.
     const totalDespesas = despesasDiaMes + cartaoMes + fixosMes;
-    const saldo = receitasMes - totalDespesas;
+
+    // Saldo real: só considera receita de renda (dinheiro de verdade) menos
+    // despesas pagas com conta corrente. Gastos cobertos por VA/CAJU não
+    // entram aqui, porque também não entraram como "renda".
+    const despesasContaCorrenteMes = despesasDiaContaCorrenteMes + fixosContaCorrenteMes + cartaoMes;
+    const saldo = receitasRendaMes - despesasContaCorrenteMes;
 
     const totalGuardado = state.poupanca.reduce((s, p) => {
       const v = Number(p.valor) || 0;
@@ -79,8 +112,8 @@ const Dashboard = (() => {
     }, 0);
 
     const kpis = [
-      { label: "Receitas do mês", value: receitasMes, cls: "positive" },
-      { label: "Despesas do mês", value: totalDespesas, cls: "negative" },
+      { label: "Receitas do mês (renda)", value: receitasRendaMes, cls: "positive" },
+      { label: "Despesas do mês (conta corrente)", value: despesasContaCorrenteMes, cls: "negative" },
       { label: "Saldo do mês", value: saldo, cls: saldo >= 0 ? "positive" : "negative" },
       { label: "Total guardado", value: totalGuardado, cls: "" }
     ];
@@ -108,7 +141,10 @@ const Dashboard = (() => {
 
     return {
       receitasMes,
+      receitasRendaMes,
+      receitasBeneficioMes,
       totalDespesas,
+      despesasContaCorrenteMes,
       saldo,
       totalGuardado,
       despesasDiaMes,
@@ -117,6 +153,68 @@ const Dashboard = (() => {
       fixosMes,
       gastosFixosTotais
     };
+  }
+
+  // Saldo restante de cada benefício (VA, CAJU, etc.): quanto foi recebido
+  // esse mês (receita recorrente do tipo "benefício") menos quanto já foi
+  // gasto com despesas/gastos fixos que informaram essa mesma fonte.
+  function saldoPorFonte(state, key) {
+    const { diaADia, fixos } = allDespesasDoMes(state, key);
+
+    const beneficios = state.receitas.filter((r) => {
+      const rMonth = monthKey(r.data);
+      if (!rMonth) return false;
+      if (tipoReceita(r) !== "beneficio") return false;
+      return isRecorrente(r) ? rMonth <= key : rMonth === key;
+    });
+
+    const nomes = [...new Set(beneficios.map((b) => (b.descricao || "").trim()).filter(Boolean))];
+
+    return nomes.map((nome) => {
+      const nomeLower = nome.toLowerCase();
+      const recebido = beneficios
+        .filter((b) => (b.descricao || "").trim().toLowerCase() === nomeLower)
+        .reduce((s, b) => s + (Number(b.valor) || 0), 0);
+      const gastoDiaADia = diaADia
+        .filter((d) => (d.fonte || "").trim().toLowerCase() === nomeLower)
+        .reduce((s, d) => s + (Number(d.valor) || 0), 0);
+      const gastoFixos = fixos
+        .filter((f) => (f.fonte || "").trim().toLowerCase() === nomeLower)
+        .reduce((s, f) => s + (Number(f.valorMensal) || 0), 0);
+      const gasto = gastoDiaADia + gastoFixos;
+      return { nome, recebido, gasto, saldo: recebido - gasto };
+    });
+  }
+
+  function renderSaldoFontes(state) {
+    const el = document.getElementById("dashboard-saldo-fontes");
+    if (!el) return;
+    const key = currentMonthKey();
+    const fontes = saldoPorFonte(state, key);
+
+    if (!fontes.length) {
+      el.innerHTML = "";
+      el.style.display = "none";
+      return;
+    }
+
+    el.style.display = "block";
+    el.innerHTML = `
+      <h3>Saldo por benefício (VA, CAJU, etc.)</h3>
+      <div class="grid cols-3">
+        ${fontes
+          .map(
+            (f) => `
+          <div>
+            <div class="kpi-label">${f.nome}</div>
+            <div class="kpi-value ${f.saldo >= 0 ? "positive" : "negative"}">${UI.formatBRL(f.saldo)}</div>
+            <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">
+              Recebido: ${UI.formatBRL(f.recebido)} · Gasto: ${UI.formatBRL(f.gasto)}
+            </div>
+          </div>`
+          )
+          .join("")}
+      </div>`;
   }
 
   function renderChartCategorias(state) {
@@ -202,23 +300,25 @@ const Dashboard = (() => {
     const insights = [];
 
     if (kpis.saldo < 0) {
-      insights.push(`⚠️ Seu saldo do mês está negativo em ${UI.formatBRL(Math.abs(kpis.saldo))}. Suas despesas superaram as receitas.`);
-    } else if (kpis.receitasMes > 0) {
-      const pct = ((kpis.saldo / kpis.receitasMes) * 100).toFixed(0);
-      insights.push(`✅ Você está guardando ${pct}% da sua receita este mês (${UI.formatBRL(kpis.saldo)}).`);
+      insights.push(
+        `⚠️ Seu saldo real do mês está negativo em ${UI.formatBRL(Math.abs(kpis.saldo))} (considerando só renda e gastos de conta corrente).`
+      );
+    } else if (kpis.receitasRendaMes > 0) {
+      const pct = ((kpis.saldo / kpis.receitasRendaMes) * 100).toFixed(0);
+      insights.push(`✅ Você está guardando ${pct}% da sua renda este mês (${UI.formatBRL(kpis.saldo)}).`);
     }
 
-    if (kpis.cartaoMes > 0 && kpis.receitasMes > 0) {
-      const pctCartao = ((kpis.cartaoMes / kpis.receitasMes) * 100).toFixed(0);
+    if (kpis.cartaoMes > 0 && kpis.receitasRendaMes > 0) {
+      const pctCartao = ((kpis.cartaoMes / kpis.receitasRendaMes) * 100).toFixed(0);
       if (pctCartao > 30) {
-        insights.push(`💳 O cartão de crédito já consome ${pctCartao}% da sua receita do mês. Vale ficar de olho.`);
+        insights.push(`💳 O cartão de crédito já consome ${pctCartao}% da sua renda do mês. Vale ficar de olho.`);
       }
     }
 
-    if (kpis.gastosFixosTotais > 0 && kpis.receitasMes > 0) {
-      const pctFixos = ((kpis.gastosFixosTotais / kpis.receitasMes) * 100).toFixed(0);
+    if (kpis.gastosFixosTotais > 0 && kpis.receitasRendaMes > 0) {
+      const pctFixos = ((kpis.gastosFixosTotais / kpis.receitasRendaMes) * 100).toFixed(0);
       insights.push(
-        `📄 Seus gastos fixos (boleto + cartão recorrente) representam ${pctFixos}% da sua receita mensal (${UI.formatBRL(kpis.gastosFixosTotais)}).`
+        `📄 Seus gastos fixos (boleto + cartão recorrente) representam ${pctFixos}% da sua renda mensal (${UI.formatBRL(kpis.gastosFixosTotais)}).`
       );
     }
 
@@ -251,6 +351,7 @@ const Dashboard = (() => {
 
   function render(state) {
     const kpis = renderKpis(state);
+    renderSaldoFontes(state);
     renderChartCategorias(state);
     renderChartEvolucao(state);
     renderInsights(state, kpis);

@@ -35,6 +35,8 @@
 
     <div class="card" id="dashboard-fixos-totais" style="margin-top:16px;"></div>
 
+    <div class="card" id="dashboard-saldo-fontes" style="margin-top:16px; display:none;"></div>
+
     <div class="grid cols-2" style="margin-top:16px;">
       <div class="card">
         <h3>Despesas por categoria (mês atual)</h3>
@@ -71,15 +73,22 @@
           </select>
         </div>
         <div><label>Valor (R$)</label><input type="number" step="0.01" name="valor" required placeholder="0,00" /></div>
+        <div>
+          <label>Tipo</label>
+          <select name="tipo">
+            <option value="renda">Renda (dinheiro real)</option>
+            <option value="beneficio">Benefício (VA, CAJU...)</option>
+          </select>
+        </div>
         <div style="display:flex; align-items:center; gap:6px; padding-bottom:9px;">
           <input type="checkbox" name="recorrente" id="receita-recorrente" style="width:auto;" />
           <label for="receita-recorrente" style="margin:0;">Recorrente (todo mês)</label>
         </div>
         <div><button class="btn" type="submit">Adicionar</button></div>
       </form>
-      <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Marque "Recorrente" para receitas fixas como salário — assim ela entra automaticamente no cálculo todos os meses, sem precisar cadastrar de novo.</p>
+      <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Marque "Recorrente" para receitas fixas como salário — assim ela entra automaticamente no cálculo todos os meses, sem precisar cadastrar de novo. Use "Benefício" para VA, CAJU e afins: eles contam no saldo por benefício, mas não entram no seu saldo real (afinal, não podem virar poupança).</p>
       <table id="table-receitas">
-        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th></th><th></th></tr></thead>
+        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Tipo</th><th>Valor</th><th></th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -107,14 +116,25 @@
           </select>
         </div>
         <div><label>Valor (R$)</label><input type="number" step="0.01" name="valor" required placeholder="0,00" /></div>
+        <div>
+          <label>Fonte de pagamento</label>
+          <input type="text" name="fonte" list="fontes-sugeridas" placeholder="Conta corrente" />
+        </div>
         <div><button class="btn" type="submit">Adicionar</button></div>
       </form>
+      <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Deixe em branco para "Conta corrente", ou informe o benefício usado (ex: VA, CAJU) — assim o gasto entra no saldo daquele benefício em vez do seu saldo real.</p>
       <table id="table-despesas">
-        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th></th></tr></thead>
+        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Fonte</th><th>Valor</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
   </section>
+
+  <datalist id="fontes-sugeridas">
+    <option value="Conta corrente"></option>
+    <option value="VA"></option>
+    <option value="CAJU"></option>
+  </datalist>
 
   <!-- ===================== GASTOS FIXOS ===================== -->
   <section id="view-fixos" class="view">
@@ -137,11 +157,15 @@
         </div>
         <div><label>Valor mensal (R$)</label><input type="number" step="0.01" name="valorMensal" required placeholder="0,00" /></div>
         <div><label>Dia de vencimento</label><input type="number" min="1" max="31" name="diaVencimento" required placeholder="Ex: 10" /></div>
+        <div>
+          <label>Fonte de pagamento</label>
+          <input type="text" name="fonte" list="fontes-sugeridas" placeholder="Conta corrente" />
+        </div>
         <div><button class="btn" type="submit">Adicionar</button></div>
       </form>
-      <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Assinaturas fixas cobradas no cartão (academia, streaming, seguro) não são cadastradas aqui — marque "Recorrente" na aba <strong>Cartão de crédito</strong> e elas aparecem automaticamente nesta lista também.</p>
+      <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Assinaturas fixas cobradas no cartão (academia, streaming, seguro) não são cadastradas aqui — marque "Recorrente" na aba <strong>Cartão de crédito</strong> e elas aparecem automaticamente nesta lista também. Na "Fonte de pagamento", deixe em branco para "Conta corrente" ou informe o benefício usado (ex: CAJU).</p>
       <table id="table-fixos">
-        <thead><tr><th>Descrição</th><th>Categoria</th><th>Forma de pagamento</th><th>Valor mensal</th><th>Vencimento</th><th></th></tr></thead>
+        <thead><tr><th>Descrição</th><th>Categoria</th><th>Forma de pagamento</th><th>Fonte</th><th>Valor mensal</th><th>Vencimento</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>

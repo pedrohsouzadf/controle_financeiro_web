@@ -33,6 +33,12 @@
         { render: (r) => UI.formatDate(r.data) },
         { field: "descricao" },
         { render: (r) => `<span class="tag">${r.categoria}</span>` },
+        {
+          render: (r) =>
+            r.tipo === "beneficio"
+              ? `<span class="tag" style="background:#fff2e0;color:#a35b00;">Benefício</span>`
+              : `<span class="tag">Renda</span>`
+        },
         { render: (r) => `<span class="value-in">${UI.formatBRL(r.valor)}</span>` },
         { render: (r) => (isRecorrente(r) ? `<span class="tag" style="background:#e6f9ec;color:#1a7f3c;">Recorrente</span>` : "") }
       ],
@@ -60,6 +66,7 @@
         { render: (r) => UI.formatDate(r.data) },
         { field: "descricao" },
         { render: (r) => `<span class="tag">${r.categoria}</span>` },
+        { render: (r) => (r.fonte ? `<span class="tag">${r.fonte}</span>` : "Conta corrente") },
         { render: (r) => `<span class="value-out">${UI.formatBRL(r.valor)}</span>` }
       ],
       async (row) => {
@@ -88,6 +95,7 @@
       categoria: f.categoria,
       valorMensal: f.valorMensal,
       formaPagamento: "Boleto",
+      fonte: f.fonte || "Conta corrente",
       vencimento: `Dia ${f.diaVencimento}`
     }));
     const cartaoRecorrentes = state.cartao.filter(isRecorrente).map((c) => ({
@@ -97,6 +105,7 @@
       categoria: c.categoria,
       valorMensal: c.valor,
       formaPagamento: c.cartao ? `Cartão (${c.cartao})` : "Cartão de crédito",
+      fonte: "—",
       vencimento: "—"
     }));
     const rows = [...boletos, ...cartaoRecorrentes];
@@ -108,6 +117,7 @@
         { field: "descricao" },
         { render: (r) => `<span class="tag">${r.categoria}</span>` },
         { field: "formaPagamento" },
+        { render: (r) => (r.fonte && r.fonte !== "—" ? `<span class="tag">${r.fonte}</span>` : "—") },
         { render: (r) => `<span class="value-out">${UI.formatBRL(r.valorMensal)}</span>` },
         { field: "vencimento" }
       ],
