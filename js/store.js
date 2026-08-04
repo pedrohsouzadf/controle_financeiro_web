@@ -69,5 +69,13 @@ const Store = (() => {
     saveCache();
   }
 
-  return { refresh, get, addItem, deleteItem, loadCache };
+  async function updateItem(sheetKey, id, data) {
+    if (!Api.isConfigured()) throw new Error("Configure a API primeiro (js/config.js)");
+    await Api.update(sheetKey, id, data);
+    const idx = state[sheetKey].findIndex((i) => String(i.id) === String(id));
+    if (idx !== -1) state[sheetKey][idx] = { ...state[sheetKey][idx], ...data, id };
+    saveCache();
+  }
+
+  return { refresh, get, addItem, deleteItem, updateItem, loadCache };
 })();

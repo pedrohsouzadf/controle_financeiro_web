@@ -29,7 +29,15 @@ const UI = (() => {
     return d.toLocaleDateString("pt-BR");
   }
 
-  function renderTable(tbodyEl, rows, columns, onDelete) {
+  // `actionsParam` pode ser:
+  //  - uma função onDelete(row) — comportamento antigo, mostra só "Excluir"
+  //  - um array de ações [{ label, className, onClick(row) }, ...]
+  function renderTable(tbodyEl, rows, columns, actionsParam) {
+    const actions =
+      typeof actionsParam === "function"
+        ? [{ label: "Excluir", className: "btn danger", onClick: actionsParam }]
+        : actionsParam || [];
+
     tbodyEl.innerHTML = "";
     if (!rows.length) {
       const tr = document.createElement("tr");
@@ -49,11 +57,15 @@ const UI = (() => {
         tr.appendChild(td);
       });
       const tdActions = document.createElement("td");
-      const btn = document.createElement("button");
-      btn.className = "btn danger";
-      btn.textContent = "Excluir";
-      btn.onclick = () => onDelete(row);
-      tdActions.appendChild(btn);
+      tdActions.style.whiteSpace = "nowrap";
+      actions.forEach((action) => {
+        const btn = document.createElement("button");
+        btn.className = action.className || "btn secondary";
+        btn.textContent = action.label;
+        btn.style.marginRight = "4px";
+        btn.onclick = () => action.onClick(row);
+        tdActions.appendChild(btn);
+      });
       tr.appendChild(tdActions);
       tbodyEl.appendChild(tr);
     });

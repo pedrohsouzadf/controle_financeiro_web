@@ -23,6 +23,9 @@
     });
   }
 
+  // Referências preenchidas em init() — usadas pelos botões "Editar" das tabelas.
+  let despesasEditor, fixosEditor, cartaoEditor;
+
   // ---------- RECEITAS ----------
   function renderReceitas() {
     const rows = UI.sortByDateDesc(Store.get().receitas);
@@ -42,17 +45,23 @@
         { render: (r) => `<span class="value-in">${UI.formatBRL(r.valor)}</span>` },
         { render: (r) => (isRecorrente(r) ? `<span class="tag" style="background:#e6f9ec;color:#1a7f3c;">Recorrente</span>` : "") }
       ],
-      async (row) => {
-        if (!confirm("Excluir esta receita?")) return;
-        try {
-          await Store.deleteItem("receitas", row.id);
-          renderReceitas();
-          Dashboard.render(Store.get());
-          UI.toast("Receita excluída");
-        } catch (e) {
-          UI.toast(e.message, true);
+      [
+        {
+          label: "Excluir",
+          className: "btn danger",
+          onClick: async (row) => {
+            if (!confirm("Excluir esta receita?")) return;
+            try {
+              await Store.deleteItem("receitas", row.id);
+              renderReceitas();
+              Dashboard.render(Store.get());
+              UI.toast("Receita excluída");
+            } catch (e) {
+              UI.toast(e.message, true);
+            }
+          }
         }
-      }
+      ]
     );
   }
 
@@ -69,17 +78,24 @@
         { render: (r) => (r.fonte ? `<span class="tag">${r.fonte}</span>` : "Conta corrente") },
         { render: (r) => `<span class="value-out">${UI.formatBRL(r.valor)}</span>` }
       ],
-      async (row) => {
-        if (!confirm("Excluir esta despesa?")) return;
-        try {
-          await Store.deleteItem("despesas", row.id);
-          renderDespesas();
-          Dashboard.render(Store.get());
-          UI.toast("Despesa excluída");
-        } catch (e) {
-          UI.toast(e.message, true);
+      [
+        { label: "Editar", className: "btn secondary", onClick: (row) => despesasEditor.startEdit(row) },
+        {
+          label: "Excluir",
+          className: "btn danger",
+          onClick: async (row) => {
+            if (!confirm("Excluir esta despesa?")) return;
+            try {
+              await Store.deleteItem("despesas", row.id);
+              renderDespesas();
+              Dashboard.render(Store.get());
+              UI.toast("Despesa excluída");
+            } catch (e) {
+              UI.toast(e.message, true);
+            }
+          }
         }
-      }
+      ]
     );
   }
 
@@ -89,24 +105,20 @@
   function renderFixos() {
     const state = Store.get();
     const boletos = state.fixos.map((f) => ({
-      id: f.id,
+      ...f,
       origem: "fixos",
-      descricao: f.descricao,
-      categoria: f.categoria,
       valorMensal: f.valorMensal,
       formaPagamento: "Boleto",
       fonte: f.fonte || "Conta corrente",
-      vencimento: `Dia ${f.diaVencimento}`
+      vencimentoLabel: `Dia ${f.diaVencimento}`
     }));
     const cartaoRecorrentes = state.cartao.filter(isRecorrente).map((c) => ({
-      id: c.id,
+      ...c,
       origem: "cartao",
-      descricao: c.descricao,
-      categoria: c.categoria,
       valorMensal: c.valor,
       formaPagamento: c.cartao ? `Cartão (${c.cartao})` : "Cartão de crédito",
       fonte: "—",
-      vencimento: "—"
+      vencimentoLabel: "—"
     }));
     const rows = [...boletos, ...cartaoRecorrentes];
 
@@ -119,24 +131,42 @@
         { field: "formaPagamento" },
         { render: (r) => (r.fonte && r.fonte !== "—" ? `<span class="tag">${r.fonte}</span>` : "—") },
         { render: (r) => `<span class="value-out">${UI.formatBRL(r.valorMensal)}</span>` },
-        { field: "vencimento" }
+        { field: "vencimentoLabel" }
       ],
-      async (row) => {
-        const msg =
-          row.origem === "cartao"
-            ? "Este item vem da aba Cartão de crédito. Excluir?"
-            : "Excluir este gasto fixo?";
-        if (!confirm(msg)) return;
-        try {
-          await Store.deleteItem(row.origem, row.id);
-          renderFixos();
-          if (row.origem === "cartao") renderCartao();
-          Dashboard.render(Store.get());
-          UI.toast("Gasto fixo excluído");
-        } catch (e) {
-          UI.toast(e.message, true);
+      [
+        {
+          label: "Editar",
+          className: "btn secondary",
+          onClick: (row) => {
+            if (row.origem === "cartao") {
+              UI.toast('Este item vem do Cartão de crédito — edite por lá', true);
+              switchView("cartao");
+              return;
+            }
+            fixosEditor.startEdit(row);
+          }
+        },
+        {
+          label: "Excluir",
+          className: "btn danger",
+          onClick: async (row) => {
+            const msg =
+              row.origem === "cartao"
+                ? "Este item vem da aba Cartão de crédito. Excluir?"
+                : "Excluir este gasto fixo?";
+            if (!confirm(msg)) return;
+            try {
+              await Store.deleteItem(row.origem, row.id);
+              renderFixos();
+              if (row.origem === "cartao") renderCartao();
+              Dashboard.render(Store.get());
+              UI.toast("Gasto fixo excluído");
+            } catch (e) {
+              UI.toast(e.message, true);
+            }
+          }
         }
-      }
+      ]
     );
   }
 
@@ -155,18 +185,25 @@
         { render: (r) => `<span class="value-out">${UI.formatBRL(r.valor)}</span>` },
         { render: (r) => (isRecorrente(r) ? `<span class="tag" style="background:#e6f9ec;color:#1a7f3c;">Recorrente</span>` : "") }
       ],
-      async (row) => {
-        if (!confirm("Excluir este lançamento do cartão?")) return;
-        try {
-          await Store.deleteItem("cartao", row.id);
-          renderCartao();
-          renderFixos();
-          Dashboard.render(Store.get());
-          UI.toast("Lançamento excluído");
-        } catch (e) {
-          UI.toast(e.message, true);
+      [
+        { label: "Editar", className: "btn secondary", onClick: (row) => cartaoEditor.startEdit(row) },
+        {
+          label: "Excluir",
+          className: "btn danger",
+          onClick: async (row) => {
+            if (!confirm("Excluir este lançamento do cartão?")) return;
+            try {
+              await Store.deleteItem("cartao", row.id);
+              renderCartao();
+              renderFixos();
+              Dashboard.render(Store.get());
+              UI.toast("Lançamento excluído");
+            } catch (e) {
+              UI.toast(e.message, true);
+            }
+          }
         }
-      }
+      ]
     );
   }
 
@@ -191,17 +228,23 @@
         },
         { field: "observacao" }
       ],
-      async (row) => {
-        if (!confirm("Excluir esta movimentação?")) return;
-        try {
-          await Store.deleteItem("poupanca", row.id);
-          renderPoupanca();
-          Dashboard.render(Store.get());
-          UI.toast("Movimentação excluída");
-        } catch (e) {
-          UI.toast(e.message, true);
+      [
+        {
+          label: "Excluir",
+          className: "btn danger",
+          onClick: async (row) => {
+            if (!confirm("Excluir esta movimentação?")) return;
+            try {
+              await Store.deleteItem("poupanca", row.id);
+              renderPoupanca();
+              Dashboard.render(Store.get());
+              UI.toast("Movimentação excluída");
+            } catch (e) {
+              UI.toast(e.message, true);
+            }
+          }
         }
-      }
+      ]
     );
   }
 
@@ -221,6 +264,20 @@
     return data;
   }
 
+  // Preenche o formulário com os dados de uma linha existente, para edição.
+  function fillForm(form, row) {
+    Array.from(form.elements).forEach((el) => {
+      if (!el.name) return;
+      if (el.type === "checkbox") {
+        el.checked = isRecorrente(row);
+        el.dispatchEvent(new Event("change"));
+      } else if (row[el.name] !== undefined && row[el.name] !== null) {
+        el.value = row[el.name];
+      }
+    });
+  }
+
+  // Cadastro simples (sem edição) — usado em Receitas e Poupança.
   function setupForm(formId, sheetKey, onSuccess) {
     const form = document.getElementById(formId);
     form.addEventListener("submit", async (e) => {
@@ -236,6 +293,61 @@
         UI.toast(err.message, true);
       }
     });
+  }
+
+  // Cadastro + edição — usado em Despesas do dia a dia, Gastos Fixos e Cartão.
+  // Retorna { startEdit(row) } para os botões "Editar" das tabelas chamarem.
+  function setupEditableForm(formId, sheetKey, renderFn) {
+    const form = document.getElementById(formId);
+    const submitBtn = form.querySelector('button[type="submit"]');
+    let editingId = null;
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "btn secondary";
+    cancelBtn.textContent = "Cancelar edição";
+    cancelBtn.style.display = "none";
+    submitBtn.insertAdjacentElement("afterend", cancelBtn);
+
+    function stopEdit() {
+      editingId = null;
+      form.reset();
+      const recorrenteCb = form.querySelector('input[name="recorrente"]');
+      if (recorrenteCb) recorrenteCb.dispatchEvent(new Event("change"));
+      submitBtn.textContent = "Adicionar";
+      cancelBtn.style.display = "none";
+    }
+
+    function startEdit(row) {
+      editingId = row.id;
+      fillForm(form, row);
+      submitBtn.textContent = "Salvar edição";
+      cancelBtn.style.display = "inline-block";
+      form.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    cancelBtn.addEventListener("click", stopEdit);
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const data = formToObject(form);
+      try {
+        if (editingId) {
+          await Store.updateItem(sheetKey, editingId, data);
+          UI.toast("Atualizado com sucesso");
+        } else {
+          await Store.addItem(sheetKey, data);
+          UI.toast("Adicionado com sucesso");
+        }
+        stopEdit();
+        renderFn();
+        Dashboard.render(Store.get());
+      } catch (err) {
+        UI.toast(err.message, true);
+      }
+    });
+
+    return { startEdit };
   }
 
   // Quando "Recorrente" é marcado no cartão, desabilita e zera os campos de
@@ -297,13 +409,15 @@
     showConfigBannerIfNeeded();
 
     setupForm("form-receitas", "receitas", renderReceitas);
-    setupForm("form-despesas", "despesas", renderDespesas);
-    setupForm("form-fixos", "fixos", renderFixos);
-    setupForm("form-cartao", "cartao", () => {
+    setupForm("form-poupanca", "poupanca", renderPoupanca);
+
+    despesasEditor = setupEditableForm("form-despesas", "despesas", renderDespesas);
+    fixosEditor = setupEditableForm("form-fixos", "fixos", renderFixos);
+    cartaoEditor = setupEditableForm("form-cartao", "cartao", () => {
       renderCartao();
       renderFixos();
     });
-    setupForm("form-poupanca", "poupanca", renderPoupanca);
+
     setupCartaoRecorrenteToggle();
     setupSimulacao();
 
