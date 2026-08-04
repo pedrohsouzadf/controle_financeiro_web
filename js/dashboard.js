@@ -223,6 +223,67 @@ const Dashboard = (() => {
       </div>`;
   }
 
+  // Teto de cada grupo (Necessidades/Desejos/Futuro) = % da soma de TODAS as
+  // receitas do mês (renda + benefícios), seguindo a regra 50/30/20.
+  // O grupo "Futuro" também soma os depósitos de poupança feitos no mês,
+  // já que investir é justamente o objetivo desse grupo.
+  function orcamentoPorGrupo(state, key) {
+    const totalReceitas = receitasDoMes(state, key);
+    const { diaADia, cartao, fixos } = allDespesasDoMes(state, key);
+
+    const gastoPorGrupo = { necessidades: 0, desejos: 0, futuro: 0 };
+    [...diaADia, ...cartao].forEach((d) => {
+      const grupo = Categories.grupoDaCategoria(d.categoria);
+      gastoPorGrupo[grupo] += Number(d.valor || 0);
+    });
+    fixos.forEach((f) => {
+      const grupo = Categories.grupoDaCategoria(f.categoria);
+      gastoPorGrupo[grupo] += Number(f.valorMensal || 0);
+    });
+
+    const depositosMes = state.poupanca
+      .filter((p) => monthKey(p.data) === key && p.tipo === "deposito")
+      .reduce((s, p) => s + Number(p.valor || 0), 0);
+    gastoPorGrupo.futuro += depositosMes;
+
+    return Object.entries(Categories.CATEGORY_GROUPS).map(([grupoKey, g]) => ({
+      key: grupoKey,
+      label: g.label,
+      percentAlvo: g.percentAlvo,
+      teto: totalReceitas * (g.percentAlvo / 100),
+      realizado: gastoPorGrupo[grupoKey] || 0
+    }));
+  }
+
+  function renderOrcamentoGrupos(state) {
+    const el = document.getElementById("dashboard-orcamento-grupos");
+    if (!el) return;
+    const key = currentMonthKey();
+    const grupos = orcamentoPorGrupo(state, key);
+
+    el.innerHTML = `
+      <h3>Orçamento por grupo (regra 50/30/20)</h3>
+      <div class="grid cols-3">
+        ${grupos
+          .map((g) => {
+            const pct = g.teto > 0 ? Math.min(100, (g.realizado / g.teto) * 100) : 0;
+            const over = g.realizado > g.teto;
+            return `
+          <div>
+            <div class="kpi-label">${g.label} (${g.percentAlvo}%)</div>
+            <div class="kpi-value ${over ? "negative" : "positive"}">
+              ${UI.formatBRL(g.realizado)}
+              <span style="font-size:12px; color:var(--text-muted); font-weight:400;">/ ${UI.formatBRL(g.teto)}</span>
+            </div>
+            <div style="background:#eceef1; border-radius:999px; height:6px; margin-top:8px; overflow:hidden;">
+              <div style="width:${pct}%; height:100%; background:${over ? "var(--red)" : "var(--green)"};"></div>
+            </div>
+          </div>`;
+          })
+          .join("")}
+      </div>`;
+  }
+
   function renderChartCategorias(state) {
     const key = currentMonthKey();
     const { diaADia, cartao, fixos } = allDespesasDoMes(state, key);
@@ -371,6 +432,7 @@ const Dashboard = (() => {
   function render(state) {
     const kpis = renderKpis(state);
     renderSaldoFontes(state);
+    renderOrcamentoGrupos(state);
     renderChartCategorias(state);
     renderChartEvolucao(state);
     renderInsights(state, kpis);
