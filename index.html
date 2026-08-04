@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Meu Financeiro</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<div id="config-banner">
+  ⚠️ O site ainda não está conectado à sua planilha. Edite <code>js/config.js</code> com a URL do seu Google Apps Script.
+  Veja o <a href="README.md" target="_blank">passo a passo no README</a>.
+</div>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">💰 Meu Financeiro</div>
+  </div>
+  <nav class="tabs">
+    <button data-view="dashboard" class="active">Dashboard</button>
+    <button data-view="receitas">Receitas</button>
+    <button data-view="despesas">Despesas do dia a dia</button>
+    <button data-view="fixos">Gastos fixos (boleto)</button>
+    <button data-view="cartao">Cartão de crédito</button>
+    <button data-view="poupanca">Poupança &amp; Simulação</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- ===================== DASHBOARD ===================== -->
+  <section id="view-dashboard" class="view active">
+    <div class="grid cols-4" id="dashboard-kpis"></div>
+
+    <div class="grid cols-2" style="margin-top:16px;">
+      <div class="card">
+        <h3>Despesas por categoria (mês atual)</h3>
+        <div class="chart-wrap"><canvas id="chart-categorias"></canvas></div>
+      </div>
+      <div class="card">
+        <h3>Receitas x Despesas (últimos 6 meses)</h3>
+        <div class="chart-wrap"><canvas id="chart-evolucao"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <h3>Insights</h3>
+      <div id="insights-list"></div>
+    </div>
+  </section>
+
+  <!-- ===================== RECEITAS ===================== -->
+  <section id="view-receitas" class="view">
+    <div class="section-title">Receitas</div>
+    <div class="card">
+      <h3>Adicionar receita</h3>
+      <form class="inline-form" id="form-receitas">
+        <div><label>Data</label><input type="date" name="data" required /></div>
+        <div><label>Descrição</label><input type="text" name="descricao" required placeholder="Ex: Salário" /></div>
+        <div>
+          <label>Categoria</label>
+          <select name="categoria">
+            <option>Salário</option>
+            <option>Freelance</option>
+            <option>Investimentos</option>
+            <option>Presente</option>
+            <option>Outros</option>
+          </select>
+        </div>
+        <div><label>Valor (R$)</label><input type="number" step="0.01" name="valor" required placeholder="0,00" /></div>
+        <div><button class="btn" type="submit">Adicionar</button></div>
+      </form>
+      <table id="table-receitas">
+        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== DESPESAS DIA A DIA ===================== -->
+  <section id="view-despesas" class="view">
+    <div class="section-title">Despesas do dia a dia</div>
+    <div class="card">
+      <h3>Adicionar despesa</h3>
+      <form class="inline-form" id="form-despesas">
+        <div><label>Data</label><input type="date" name="data" required /></div>
+        <div><label>Descrição</label><input type="text" name="descricao" required placeholder="Ex: Almoço" /></div>
+        <div>
+          <label>Categoria</label>
+          <select name="categoria">
+            <option>Alimentação</option>
+            <option>Transporte</option>
+            <option>Moradia</option>
+            <option>Saúde</option>
+            <option>Educação</option>
+            <option>Lazer</option>
+            <option>Compras</option>
+            <option>Outros</option>
+          </select>
+        </div>
+        <div><label>Valor (R$)</label><input type="number" step="0.01" name="valor" required placeholder="0,00" /></div>
+        <div><button class="btn" type="submit">Adicionar</button></div>
+      </form>
+      <table id="table-despesas">
+        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== GASTOS FIXOS ===================== -->
+  <section id="view-fixos" class="view">
+    <div class="section-title">Gastos fixos (pagos por boleto)</div>
+    <div class="card">
+      <h3>Adicionar gasto fixo</h3>
+      <form class="inline-form" id="form-fixos">
+        <div><label>Descrição</label><input type="text" name="descricao" required placeholder="Ex: Aluguel" /></div>
+        <div>
+          <label>Categoria</label>
+          <select name="categoria">
+            <option>Moradia</option>
+            <option>Utilidades</option>
+            <option>Assinaturas</option>
+            <option>Educação</option>
+            <option>Saúde</option>
+            <option>Financiamento</option>
+            <option>Outros</option>
+          </select>
+        </div>
+        <div><label>Valor mensal (R$)</label><input type="number" step="0.01" name="valorMensal" required placeholder="0,00" /></div>
+        <div><label>Dia de vencimento</label><input type="number" min="1" max="31" name="diaVencimento" required placeholder="Ex: 10" /></div>
+        <div><button class="btn" type="submit">Adicionar</button></div>
+      </form>
+      <table id="table-fixos">
+        <thead><tr><th>Descrição</th><th>Categoria</th><th>Valor mensal</th><th>Vencimento</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== CARTÃO DE CRÉDITO ===================== -->
+  <section id="view-cartao" class="view">
+    <div class="section-title">Cartão de crédito</div>
+    <div class="card">
+      <h3>Adicionar gasto no cartão</h3>
+      <form class="inline-form" id="form-cartao">
+        <div><label>Data</label><input type="date" name="data" required /></div>
+        <div><label>Descrição</label><input type="text" name="descricao" required placeholder="Ex: Compra online" /></div>
+        <div>
+          <label>Categoria</label>
+          <select name="categoria">
+            <option>Alimentação</option>
+            <option>Transporte</option>
+            <option>Moradia</option>
+            <option>Saúde</option>
+            <option>Educação</option>
+            <option>Lazer</option>
+            <option>Compras</option>
+            <option>Outros</option>
+          </select>
+        </div>
+        <div><label>Cartão</label><input type="text" name="cartao" placeholder="Ex: Nubank" /></div>
+        <div><label>Valor total (R$)</label><input type="number" step="0.01" name="valor" required placeholder="0,00" /></div>
+        <div><label>Parcela atual</label><input type="number" min="1" name="parcelaAtual" value="1" /></div>
+        <div><label>Total de parcelas</label><input type="number" min="1" name="parcelasTotal" value="1" /></div>
+        <div><button class="btn" type="submit">Adicionar</button></div>
+      </form>
+      <table id="table-cartao">
+        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Cartão</th><th>Parcela</th><th>Valor</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== POUPANÇA / SIMULAÇÃO ===================== -->
+  <section id="view-poupanca" class="view">
+    <div class="section-title">Poupança</div>
+
+    <div class="grid cols-3">
+      <div class="card">
+        <div class="kpi-label">Total guardado</div>
+        <div class="kpi-value" id="poupanca-total">R$ 0,00</div>
+      </div>
+      <div class="card">
+        <div class="kpi-label">Depósitos (total)</div>
+        <div class="kpi-value positive" id="poupanca-depositos">R$ 0,00</div>
+      </div>
+      <div class="card">
+        <div class="kpi-label">Retiradas (total)</div>
+        <div class="kpi-value negative" id="poupanca-retiradas">R$ 0,00</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <h3>Registrar movimentação</h3>
+      <form class="inline-form" id="form-poupanca">
+        <div><label>Data</label><input type="date" name="data" required /></div>
+        <div>
+          <label>Tipo</label>
+          <select name="tipo">
+            <option value="deposito">Depósito</option>
+            <option value="retirada">Retirada</option>
+          </select>
+        </div>
+        <div><label>Valor (R$)</label><input type="number" step="0.01" name="valor" required placeholder="0,00" /></div>
+        <div><label>Observação</label><input type="text" name="observacao" placeholder="Opcional" /></div>
+        <div><button class="btn" type="submit">Registrar</button></div>
+      </form>
+      <table id="table-poupanca">
+        <thead><tr><th>Data</th><th>Tipo</th><th>Valor</th><th>Observação</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="section-title">Simulação de poupança</div>
+    <div class="card">
+      <h3>Quanto vou ter guardado no futuro?</h3>
+      <form class="inline-form" id="form-simulacao">
+        <div><label>Valor guardado hoje (R$)</label><input type="number" step="0.01" id="sim-inicial" placeholder="0,00" /></div>
+        <div><label>Valor a guardar por mês (R$)</label><input type="number" step="0.01" id="sim-mensal" required placeholder="0,00" /></div>
+        <div><label>Rentabilidade mensal (%)</label><input type="number" step="0.01" id="sim-taxa" value="0.8" /></div>
+        <div><label>Período (meses)</label><input type="number" min="1" id="sim-meses" value="12" /></div>
+        <div><button class="btn" type="submit">Simular</button></div>
+      </form>
+      <div id="simulacao-result" class="simulacao-result" style="display:none;"></div>
+      <div class="chart-wrap" style="margin-top:16px; display:none;" id="sim-chart-wrap">
+        <canvas id="chart-simulacao"></canvas>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>Meu Financeiro — seus dados ficam salvos na sua própria planilha do Google Sheets.</footer>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/store.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
