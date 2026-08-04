@@ -106,10 +106,15 @@ const Dashboard = (() => {
     const despesasContaCorrenteMes = despesasDiaContaCorrenteMes + fixosContaCorrenteMes + cartaoMes;
     const saldo = receitasRendaMes - despesasContaCorrenteMes;
 
-    const totalGuardado = state.poupanca.reduce((s, p) => {
-      const v = Number(p.valor) || 0;
-      return p.tipo === "retirada" ? s - v : s + v;
-    }, 0);
+    const saldoInicial = Number(state.config.saldoInicial || 0);
+    const totalGuardado =
+      saldoInicial +
+      state.poupanca.reduce((s, p) => {
+        const v = Number(p.valor) || 0;
+        return p.tipo === "retirada" ? s - v : s + v;
+      }, 0);
+
+    const metaInvestimentoMensal = Number(state.config.metaInvestimentoMensal || 0);
 
     const kpis = [
       { label: "Receitas do mês (renda)", value: receitasRendaMes, cls: "positive" },
@@ -147,6 +152,7 @@ const Dashboard = (() => {
       despesasContaCorrenteMes,
       saldo,
       totalGuardado,
+      metaInvestimentoMensal,
       despesasDiaMes,
       cartaoMes,
       cartaoRecorrenteMes,
@@ -298,6 +304,19 @@ const Dashboard = (() => {
 
   function renderInsights(state, kpis) {
     const insights = [];
+
+    if (kpis.metaInvestimentoMensal > 0) {
+      const folga = kpis.saldo - kpis.metaInvestimentoMensal;
+      if (folga >= 0) {
+        insights.push(
+          `🎯 Sua meta de investir ${UI.formatBRL(kpis.metaInvestimentoMensal)}/mês cabe no seu saldo real — depois de investir, ainda sobram ${UI.formatBRL(folga)}.`
+        );
+      } else {
+        insights.push(
+          `⚠️ Sua meta de investir ${UI.formatBRL(kpis.metaInvestimentoMensal)}/mês está ${UI.formatBRL(Math.abs(folga))} acima do seu saldo real deste mês. Vale revisar gastos ou ajustar a meta.`
+        );
+      }
+    }
 
     if (kpis.saldo < 0) {
       insights.push(

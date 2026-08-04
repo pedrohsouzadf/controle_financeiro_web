@@ -77,5 +77,12 @@ const Store = (() => {
     saveCache();
   }
 
-  return { refresh, get, addItem, deleteItem, updateItem, loadCache };
+  async function setConfigValue(chave, valor) {
+    if (!Api.isConfigured()) throw new Error("Configure a API primeiro (js/config.js)");
+    await Api.setConfig(chave, valor);
+    state.config[chave] = valor;
+    saveCache();
+  }
+
+  return { refresh, get, addItem, deleteItem, updateItem, setConfigValue, loadCache };
 })();

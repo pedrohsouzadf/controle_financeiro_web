@@ -208,11 +208,23 @@
   }
 
   // ---------- POUPANÇA ----------
+  function totalGuardadoAtual() {
+    const state = Store.get();
+    const saldoInicial = Number(state.config.saldoInicial || 0);
+    const depositos = state.poupanca
+      .filter((p) => p.tipo === "deposito")
+      .reduce((s, p) => s + Number(p.valor || 0), 0);
+    const retiradas = state.poupanca
+      .filter((p) => p.tipo === "retirada")
+      .reduce((s, p) => s + Number(p.valor || 0), 0);
+    return saldoInicial + depositos - retiradas;
+  }
+
   function renderPoupanca() {
     const rows = UI.sortByDateDesc(Store.get().poupanca);
     const depositos = rows.filter((p) => p.tipo === "deposito").reduce((s, p) => s + Number(p.valor || 0), 0);
     const retiradas = rows.filter((p) => p.tipo === "retirada").reduce((s, p) => s + Number(p.valor || 0), 0);
-    document.getElementById("poupanca-total").textContent = UI.formatBRL(depositos - retiradas);
+    document.getElementById("poupanca-total").textContent = UI.formatBRL(totalGuardadoAtual());
     document.getElementById("poupanca-depositos").textContent = UI.formatBRL(depositos);
     document.getElementById("poupanca-retiradas").textContent = UI.formatBRL(retiradas);
 
@@ -377,6 +389,52 @@
     apply();
   }
 
+  // Salva o saldo inicial já guardado e a meta de investimento mensal
+  // (ambos ficam gravados na aba Config da planilha/DynamoDB).
+  function setupPoupancaConfig() {
+    const form = document.getElementById("form-poupanca-config");
+    const saldoInput = document.getElementById("config-saldo-inicial");
+    const metaInput = document.getElementById("config-meta-mensal");
+
+    function preencherComConfigAtual() {
+      const config = Store.get().config || {};
+      if (document.activeElement !== saldoInput) {
+        saldoInput.value = config.saldoInicial ?? "";
+      }
+      if (document.activeElement !== metaInput) {
+        metaInput.value = config.metaInvestimentoMensal ?? "";
+      }
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try {
+        await Store.setConfigValue("saldoInicial", saldoInput.value || "0");
+        await Store.setConfigValue("metaInvestimentoMensal", metaInput.value || "0");
+        renderPoupanca();
+        preencherSimulacaoComPadroes();
+        Dashboard.render(Store.get());
+        UI.toast("Configurações salvas");
+      } catch (err) {
+        UI.toast(err.message, true);
+      }
+    });
+
+    return { preencherComConfigAtual };
+  }
+
+  // Pré-preenche a simulação com o total guardado atual e a meta mensal
+  // configurada, sem sobrescrever se o usuário já estiver mexendo nos campos.
+  function preencherSimulacaoComPadroes() {
+    const simInicial = document.getElementById("sim-inicial");
+    const simMensal = document.getElementById("sim-mensal");
+    const config = Store.get().config || {};
+    if (simInicial && !simInicial.value) simInicial.value = totalGuardadoAtual().toFixed(2);
+    if (simMensal && !simMensal.value && config.metaInvestimentoMensal) {
+      simMensal.value = Number(config.metaInvestimentoMensal).toFixed(2);
+    }
+  }
+
   function setupSimulacao() {
     const form = document.getElementById("form-simulacao");
     form.addEventListener("submit", (e) => {
@@ -419,6 +477,7 @@
     });
 
     setupCartaoRecorrenteToggle();
+    const poupancaConfig = setupPoupancaConfig();
     setupSimulacao();
 
     try {
@@ -432,6 +491,8 @@
     renderFixos();
     renderCartao();
     renderPoupanca();
+    poupancaConfig.preencherComConfigAtual();
+    preencherSimulacaoComPadroes();
     Dashboard.render(Store.get());
   }
 
