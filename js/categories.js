@@ -16,9 +16,9 @@ const Categories = (() => {
       categorias: ["Lazer", "Alimentação Fora", "Assinaturas", "Compras Pessoais", "Outros"]
     },
     futuro: {
-      label: "Futuro e Prioridades",
+      label: "Investimentos",
       percentAlvo: 20,
-      categorias: ["Dívidas/Financiamento"]
+      categorias: ["Dívidas/Financiamento", "Reserva de Emergência", "Investimentos"]
     }
   };
 

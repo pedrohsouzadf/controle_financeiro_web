@@ -235,11 +235,15 @@ const Dashboard = (() => {
       .reduce((s, p) => s + Number(p.valor || 0), 0);
     gastoPorGrupo.futuro += depositosMes;
 
+    // O grupo "Investimentos" (ex-Futuro e Prioridades) tem um valor alvo fixo
+    // definido pelo usuário (R$ 1.100), em vez do percentual sobre a renda.
+    const TETO_FIXO_INVESTIMENTOS = 1100;
+
     return Object.entries(Categories.CATEGORY_GROUPS).map(([grupoKey, g]) => ({
       key: grupoKey,
       label: g.label,
       percentAlvo: g.percentAlvo,
-      teto: totalReceitas * (g.percentAlvo / 100),
+      teto: grupoKey === "futuro" ? TETO_FIXO_INVESTIMENTOS : totalReceitas * (g.percentAlvo / 100),
       realizado: gastoPorGrupo[grupoKey] || 0
     }));
   }
