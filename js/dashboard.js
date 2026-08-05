@@ -125,6 +125,23 @@ const Dashboard = (() => {
       .reduce((s, r) => s + (Number(r.valor) || 0), 0);
   }
 
+  // Agrupa as receitas do mês (de um tipo — renda ou benefício) pela
+  // descrição, pra mostrar "de onde vem cada uma" nos cards do dashboard.
+  function receitasPorDescricao(state, key, tipo) {
+    const totais = {};
+    state.receitas
+      .filter((r) => {
+        const rMonth = monthKey(r.data);
+        if (!rMonth || tipoReceita(r) !== tipo) return false;
+        return isRecorrente(r) ? rMonth <= key : rMonth === key;
+      })
+      .forEach((r) => {
+        const nome = (r.descricao || "Outros").trim() || "Outros";
+        totais[nome] = (totais[nome] || 0) + Number(r.valor || 0);
+      });
+    return Object.entries(totais).sort((a, b) => b[1] - a[1]);
+  }
+
   function renderKpis(state) {
     const key = mesAtivo();
 
@@ -178,40 +195,85 @@ const Dashboard = (() => {
     const fontesBeneficio = saldoPorFonte(state, key);
     const saldoBeneficiosTotal = fontesBeneficio.reduce((s, f) => s + f.saldo, 0);
 
+    // De onde vem cada receita de renda (ex: salário de cada um), pra mostrar
+    // como detalhe dentro do card "Total receitas".
+    const receitasRendaDetalhe = receitasPorDescricao(state, key, "renda");
+
     const cardSimples = (label, value, cls) => `
       <div class="card">
         <div class="kpi-label" style="text-transform:uppercase;">${label}</div>
         <div class="kpi-value ${cls}">${UI.formatBRL(value)}</div>
       </div>`;
 
-    const cardSaldoBeneficios = `
+    const cardComDetalhe = (label, value, cls, linhas) => `
       <div class="card">
-        <div class="kpi-label" style="text-transform:uppercase;">Saldo Benefícios</div>
-        <div class="kpi-value ${saldoBeneficiosTotal >= 0 ? "positive" : "negative"}">${UI.formatBRL(saldoBeneficiosTotal)}</div>
-        ${
-          fontesBeneficio.length
-            ? fontesBeneficio
-                .map(
-                  (f) => `
+        <div class="kpi-label" style="text-transform:uppercase;">${label}</div>
+        <div class="kpi-value ${cls}">${UI.formatBRL(value)}</div>
+        ${linhas}
+      </div>`;
+
+    const linhaDetalhe = (texto) => `<div style="margin-top:6px; font-size:13px; color:var(--text-muted);">${texto}</div>`;
+    const semDados = (texto) => linhaDetalhe(texto);
+
+    const cardTotalReceitas = cardComDetalhe(
+      "Total receitas - renda",
+      receitasRendaMes,
+      "positive",
+      receitasRendaDetalhe.length
+        ? receitasRendaDetalhe.map(([nome, val]) => linhaDetalhe(`${nome}: ${UI.formatBRL(val)}`)).join("")
+        : semDados("Nenhuma receita de renda neste mês.")
+    );
+
+    const cardTotalBeneficios = cardComDetalhe(
+      "Total Benefícios",
+      receitasBeneficioMes,
+      "positive",
+      fontesBeneficio.length
+        ? fontesBeneficio.map((f) => `<div style="margin-top:6px; font-size:13px;">${UI.fonteBadge(f.nome)} <span style="color:var(--text-muted);">${UI.formatBRL(f.recebido)}</span></div>`).join("")
+        : semDados("Nenhum benefício neste mês.")
+    );
+
+    const cardSaldoBeneficios = cardComDetalhe(
+      "Saldo Benefícios",
+      saldoBeneficiosTotal,
+      saldoBeneficiosTotal >= 0 ? "positive" : "negative",
+      fontesBeneficio.length
+        ? fontesBeneficio
+            .map(
+              (f) => `
           <div style="margin-top:6px; font-size:13px;">
             ${UI.fonteBadge(f.nome)}
             <span style="color:var(--text-muted);">restam ${UI.formatBRL(f.saldo)}</span>
           </div>`
-                )
-                .join("")
-            : `<div style="font-size:12px; color:var(--text-muted); margin-top:6px;">Sem benefícios cadastrados neste mês.</div>`
-        }
+            )
+            .join("")
+        : semDados("Sem benefícios cadastrados neste mês.")
+    );
+
+    // Card de resultado em destaque, separado visualmente dos grupos de
+    // receitas e despesas — é o número que resume o mês.
+    const cardSaldoDestaque = `
+      <div class="card" style="text-align:center; padding:28px;">
+        <div class="kpi-label" style="text-transform:uppercase; font-size:14px;">Saldo Salários</div>
+        <div class="kpi-value ${saldo >= 0 ? "positive" : "negative"}" style="font-size:38px;">${UI.formatBRL(saldo)}</div>
       </div>`;
 
+    const rotuloGrupo = (texto, comMargem) => `
+      <div style="font-size:12px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em; margin:${comMargem ? "24px" : "0"} 0 10px;">${texto}</div>`;
+
     const el = document.getElementById("dashboard-kpis");
-    el.innerHTML =
-      cardSimples("Total receitas - renda", receitasRendaMes, "positive") +
-      cardSimples("Total Benefícios", receitasBeneficioMes, "positive") +
-      cardSaldoBeneficios +
-      cardSimples("Gastos fixos", gastosFixosDinheiroMes, "negative") +
-      cardSimples("Gastos variáveis", gastosVariaveisDinheiroMes, "negative") +
-      cardSimples("Gastos totais", despesasContaCorrenteMes, "negative") +
-      cardSimples("Saldo total", saldo, saldo >= 0 ? "positive" : "negative");
+    el.innerHTML = `
+      ${rotuloGrupo("Receitas", false)}
+      <div class="grid cols-3">${cardTotalReceitas}${cardTotalBeneficios}${cardSaldoBeneficios}</div>
+      ${rotuloGrupo("Despesas", true)}
+      <div class="grid cols-3">
+        ${cardSimples("Gastos fixos", gastosFixosDinheiroMes, "negative")}
+        ${cardSimples("Gastos variáveis", gastosVariaveisDinheiroMes, "negative")}
+        ${cardSimples("Gastos totais", despesasContaCorrenteMes, "negative")}
+      </div>
+      ${rotuloGrupo("Resultado", true)}
+      ${cardSaldoDestaque}
+    `;
 
     return {
       receitasMes,
