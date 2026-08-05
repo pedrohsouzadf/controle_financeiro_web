@@ -117,8 +117,17 @@ const Dashboard = (() => {
 
     const metaInvestimentoMensal = Number(state.config.metaInvestimentoMensal || 0);
 
+    // Decompõe "Gastos totais" (dinheiro real) em fixo e variável, pra ficar
+    // explícito o que é compromisso recorrente (boleto + assinatura no
+    // cartão) e o que é gasto do dia a dia (inclusive compras avulsas no
+    // cartão, que são variáveis mesmo sendo pagas com cartão).
+    const gastosFixosDinheiroMes = fixosContaCorrenteMes + cartaoRecorrenteMes;
+    const gastosVariaveisDinheiroMes = despesasDiaContaCorrenteMes + (cartaoMes - cartaoRecorrenteMes);
+
     const kpis = [
       { label: "Total receitas - renda", value: receitasRendaMes, cls: "positive" },
+      { label: "Gastos fixos", value: gastosFixosDinheiroMes, cls: "negative" },
+      { label: "Gastos variáveis", value: gastosVariaveisDinheiroMes, cls: "negative" },
       { label: "Gastos totais", value: despesasContaCorrenteMes, cls: "negative" },
       { label: "Saldo total", value: saldo, cls: saldo >= 0 ? "positive" : "negative" }
     ];
@@ -147,7 +156,9 @@ const Dashboard = (() => {
       cartaoMes,
       cartaoRecorrenteMes,
       fixosMes,
-      gastosFixosTotais
+      gastosFixosTotais,
+      gastosFixosDinheiroMes,
+      gastosVariaveisDinheiroMes
     };
   }
 
@@ -202,7 +213,7 @@ const Dashboard = (() => {
           .map(
             (f) => `
           <div>
-            <div class="kpi-label">${f.nome}</div>
+            <div class="kpi-label">${UI.fonteBadge(f.nome)}</div>
             <div class="kpi-value ${f.saldo >= 0 ? "positive" : "negative"}">${UI.formatBRL(f.saldo)}</div>
             <div style="font-size:12px; color:var(--text-muted); margin-top:6px;">Recebido: ${UI.formatBRL(f.recebido)}</div>
             <div style="font-size:20px; font-weight:700; color:var(--red); margin-top:2px;">Gasto: ${UI.formatBRL(f.gasto)}</div>

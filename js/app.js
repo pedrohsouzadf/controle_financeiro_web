@@ -160,7 +160,7 @@
     });
     const entradas = Object.entries(porFonte).sort((a, b) => b[1] - a[1]);
     el.innerHTML = entradas.length
-      ? entradas.map(([fonte, val]) => `<span class="tag">${fonte}: ${UI.formatBRL(val)}</span>`).join("")
+      ? entradas.map(([fonte, val]) => UI.fonteBadge(fonte, `${fonte}: ${UI.formatBRL(val)}`)).join("")
       : "";
   }
 
@@ -178,7 +178,7 @@
         { render: (r) => UI.formatDate(r.data) },
         { field: "descricao" },
         { render: (r) => `<span class="tag">${r.categoria}</span>` },
-        { render: (r) => (r.fonte ? `<span class="tag">${r.fonte}</span>` : "Conta corrente") },
+        { render: (r) => UI.fonteBadge(r.fonte) },
         { render: (r) => `<span class="value-out">${UI.formatBRL(r.valor)}</span>` }
       ],
       [
@@ -215,7 +215,7 @@
     });
     const entradas = Object.entries(porFonte).sort((a, b) => b[1] - a[1]);
     el.innerHTML = entradas.length
-      ? entradas.map(([fonte, val]) => `<span class="tag">${fonte}: ${UI.formatBRL(val)}</span>`).join("")
+      ? entradas.map(([fonte, val]) => UI.fonteBadge(fonte, `${fonte}: ${UI.formatBRL(val)}`)).join("")
       : "";
   }
 
@@ -257,7 +257,7 @@
         { field: "descricao" },
         { render: (r) => `<span class="tag">${r.categoria}</span>` },
         { field: "formaPagamento" },
-        { render: (r) => (r.fonte && r.fonte !== "—" ? `<span class="tag">${r.fonte}</span>` : "—") },
+        { render: (r) => (r.fonte && r.fonte !== "—" ? UI.fonteBadge(r.fonte) : "—") },
         { render: (r) => `<span class="value-out">${UI.formatBRL(r.valorMensal)}</span>` },
         { field: "vencimentoLabel" }
       ],
