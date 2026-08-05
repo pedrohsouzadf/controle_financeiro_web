@@ -351,19 +351,27 @@ const Dashboard = (() => {
     const { diaADia, cartao, fixos } = allDespesasDoMes(state, key);
 
     const gastoPorGrupo = { necessidades: 0, desejos: 0, futuro: 0, extraordinarios: 0 };
-    [...diaADia, ...cartao].forEach((d) => {
-      const grupo = Categories.grupoDaCategoria(d.categoria);
-      gastoPorGrupo[grupo] += Number(d.valor || 0);
-    });
-    fixos.forEach((f) => {
-      const grupo = Categories.grupoDaCategoria(f.categoria);
-      gastoPorGrupo[grupo] += Number(f.valorMensal || 0);
-    });
+    // Dentro de cada grupo, separa quanto do gasto veio de dinheiro real
+    // (débito/cartão/conta corrente) e quanto veio de benefício (VA/CAJU) —
+    // útil porque só a parte em dinheiro compete com a meta de investimento.
+    const gastoPorGrupoDinheiro = { necessidades: 0, desejos: 0, futuro: 0, extraordinarios: 0 };
+    const gastoPorGrupoBeneficio = { necessidades: 0, desejos: 0, futuro: 0, extraordinarios: 0 };
+
+    const registrar = (item, valor, categoria) => {
+      const grupo = Categories.grupoDaCategoria(categoria);
+      gastoPorGrupo[grupo] += valor;
+      if (isContaCorrente(item)) gastoPorGrupoDinheiro[grupo] += valor;
+      else gastoPorGrupoBeneficio[grupo] += valor;
+    };
+
+    [...diaADia, ...cartao].forEach((d) => registrar(d, Number(d.valor || 0), d.categoria));
+    fixos.forEach((f) => registrar(f, Number(f.valorMensal || 0), f.categoria));
 
     const depositosMes = state.poupanca
       .filter((p) => monthKey(p.data) === key && p.tipo === "deposito")
       .reduce((s, p) => s + Number(p.valor || 0), 0);
     gastoPorGrupo.futuro += depositosMes;
+    gastoPorGrupoDinheiro.futuro += depositosMes;
 
     // O grupo "Investimentos" (ex-Futuro e Prioridades) tem um valor alvo fixo
     // definido pelo usuário (R$ 1.100), em vez do percentual sobre a renda.
@@ -376,7 +384,9 @@ const Dashboard = (() => {
         label: g.label,
         percentAlvo: g.percentAlvo,
         teto: grupoKey === "futuro" ? TETO_FIXO_INVESTIMENTOS : totalReceitas * (g.percentAlvo / 100),
-        realizado: gastoPorGrupo[grupoKey] || 0
+        realizado: gastoPorGrupo[grupoKey] || 0,
+        dinheiro: gastoPorGrupoDinheiro[grupoKey] || 0,
+        beneficio: gastoPorGrupoBeneficio[grupoKey] || 0
       }));
   }
 
@@ -414,6 +424,11 @@ const Dashboard = (() => {
             <div style="background:#eceef1; border-radius:999px; height:6px; margin-top:8px; overflow:hidden;">
               <div style="width:${pct}%; height:100%; background:${over ? "var(--red)" : "var(--green)"};"></div>
             </div>
+            ${
+              g.realizado > 0
+                ? `<div style="margin-top:8px; font-size:12px; color:var(--text-muted);">Dinheiro: ${UI.formatBRL(g.dinheiro)} · Benefício: ${UI.formatBRL(g.beneficio)}</div>`
+                : ""
+            }
           </div>`;
           })
           .join("")}
