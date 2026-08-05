@@ -259,7 +259,16 @@
         { field: "formaPagamento" },
         { render: (r) => (r.fonte && r.fonte !== "—" ? UI.fonteBadge(r.fonte) : "—") },
         { render: (r) => `<span class="value-out">${UI.formatBRL(r.valorMensal)}</span>` },
-        { field: "vencimentoLabel" }
+        { field: "vencimentoLabel" },
+        {
+          render: (r) =>
+            r.origem === "cartao"
+              ? `<span style="font-size:12px; color:var(--text-muted);">Automático</span>`
+              : `<label class="toggle-switch">
+                   <input type="checkbox" class="fixo-pago-toggle" data-id="${r.id}" ${isPago(r) ? "checked" : ""} />
+                   <span class="toggle-slider"></span>
+                 </label>`
+        }
       ],
       [
         {
@@ -296,15 +305,44 @@
         }
       ]
     );
+
+    // Toggle "Pago" atualiza na hora — o dashboard só soma esse gasto fixo
+    // no total do mês enquanto ele estiver marcado como pago.
+    document.querySelectorAll(".fixo-pago-toggle").forEach((cb) => {
+      cb.addEventListener("change", async () => {
+        try {
+          await Store.updateItem("fixos", cb.dataset.id, { pago: cb.checked ? "true" : "false" });
+          renderFixos();
+          Dashboard.render(Store.get());
+          UI.toast(cb.checked ? "Marcado como pago" : "Marcado como pendente");
+        } catch (e) {
+          UI.toast(e.message, true);
+        }
+      });
+    });
   }
 
   // ---------- CARTÃO DE CRÉDITO ----------
+  // Mostra, no cabeçalho da aba, quanto do total é recorrente (assinaturas
+  // fixas) e quanto é variável (compras avulsas, parceladas ou não).
+  function renderCartaoRecorrenteVariavel(rows) {
+    const el = document.getElementById("cartao-recorrente-variavel");
+    if (!el) return;
+    const recorrenteTotal = rows.filter(isRecorrente).reduce((s, r) => s + Number(r.valor || 0), 0);
+    const variavelTotal = rows.filter((r) => !isRecorrente(r)).reduce((s, r) => s + Number(r.valor || 0), 0);
+    el.innerHTML = `
+      <span class="tag" style="background:#e6f9ec; color:#1a7f3c;">Recorrente: ${UI.formatBRL(recorrenteTotal)}</span>
+      <span class="tag" style="background:#e6f0fd; color:#0050b3;">Variável: ${UI.formatBRL(variavelTotal)}</span>
+    `;
+  }
+
   function renderCartao() {
     const all = UI.sortByDateDesc(Store.get().cartao);
     popularFiltroMes("filtro-mes-cartao", all, "data", "cartao", renderCartao);
     popularFiltroGrupo("filtro-grupo-cartao", "cartao", renderCartao);
     const rows = filtrarPorGrupo(filtrarPorMes(all, "data", "cartao"), "cartao");
     setTabTotal("total-cartao-tab", rows.reduce((s, r) => s + Number(r.valor || 0), 0));
+    renderCartaoRecorrenteVariavel(rows);
     UI.renderTable(
       document.querySelector("#table-cartao tbody"),
       rows,
@@ -459,6 +497,13 @@
   // ---------- HELPERS ----------
   function isRecorrente(item) {
     return item.recorrente === true || item.recorrente === "true" || item.recorrente === "on";
+  }
+
+  // Um gasto fixo é considerado "pago" por padrão (registros antigos não têm
+  // esse campo ainda) — só vira "pendente" quando explicitamente marcado
+  // como false pelo toggle da aba Gastos Fixos.
+  function isPago(item) {
+    return item.pago !== false && item.pago !== "false";
   }
 
   // ---------- FORM HANDLERS ----------

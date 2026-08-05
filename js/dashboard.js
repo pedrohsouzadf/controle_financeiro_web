@@ -86,6 +86,13 @@ const Dashboard = (() => {
     return dinheiro.includes(fonte);
   }
 
+  // Um gasto fixo é considerado "pago" por padrão (registros antigos não têm
+  // esse campo ainda) — só some das somas do dashboard quando explicitamente
+  // marcado como pendente pelo toggle da aba Gastos Fixos.
+  function isPago(item) {
+    return item.pago !== false && item.pago !== "false";
+  }
+
   // Itens do cartão marcados como recorrentes (academia, streaming, seguro...)
   // contam em todo mês a partir da data de cadastro, igual às receitas fixas.
   // Itens não recorrentes contam só no mês exato da data informada.
@@ -100,13 +107,13 @@ const Dashboard = (() => {
   function allDespesasDoMes(state, key) {
     const diaADia = state.despesas.filter((d) => monthKey(d.data) === key);
     const cartao = cartaoDoMes(state, key);
-    const fixos = state.fixos.filter((f) => String(f.ativo) !== "false");
+    const fixos = state.fixos.filter((f) => String(f.ativo) !== "false" && isPago(f));
     return { diaADia, cartao, fixos };
   }
 
   function totalFixosMensal(state, { apenasContaCorrente = false } = {}) {
     return state.fixos
-      .filter((f) => String(f.ativo) !== "false")
+      .filter((f) => String(f.ativo) !== "false" && isPago(f))
       .filter((f) => !apenasContaCorrente || isContaCorrente(f))
       .reduce((sum, f) => sum + (Number(f.valorMensal) || 0), 0);
   }
@@ -250,12 +257,21 @@ const Dashboard = (() => {
         : semDados("Sem benefícios cadastrados neste mês.")
     );
 
-    // Card de resultado em destaque, separado visualmente dos grupos de
-    // receitas e despesas — é o número que resume o mês.
-    const cardSaldoDestaque = `
-      <div class="card" style="text-align:center; padding:28px;">
-        <div class="kpi-label" style="text-transform:uppercase; font-size:14px;">Saldo Salários</div>
-        <div class="kpi-value ${saldo >= 0 ? "positive" : "negative"}" style="font-size:38px;">${UI.formatBRL(saldo)}</div>
+    // Gastos fixos e variáveis juntos numa única caixa (lado a lado), pra
+    // não ocupar duas caixas inteiras só pra mostrar a decomposição do total.
+    const cardFixosEVariaveis = `
+      <div class="card">
+        <div class="kpi-label" style="text-transform:uppercase;">Gastos Fixos e Variáveis</div>
+        <div style="display:flex; gap:24px; margin-top:4px;">
+          <div>
+            <div style="font-size:12px; color:var(--text-muted);">Fixos</div>
+            <div class="kpi-value negative" style="font-size:22px;">${UI.formatBRL(gastosFixosDinheiroMes)}</div>
+          </div>
+          <div>
+            <div style="font-size:12px; color:var(--text-muted);">Variáveis</div>
+            <div class="kpi-value negative" style="font-size:22px;">${UI.formatBRL(gastosVariaveisDinheiroMes)}</div>
+          </div>
+        </div>
       </div>`;
 
     const rotuloGrupo = (texto, comMargem) => `
@@ -267,12 +283,10 @@ const Dashboard = (() => {
       <div class="grid cols-3">${cardTotalReceitas}${cardTotalBeneficios}${cardSaldoBeneficios}</div>
       ${rotuloGrupo("Despesas", true)}
       <div class="grid cols-3">
-        ${cardSimples("Gastos fixos", gastosFixosDinheiroMes, "negative")}
-        ${cardSimples("Gastos variáveis", gastosVariaveisDinheiroMes, "negative")}
+        ${cardFixosEVariaveis}
         ${cardSimples("Gastos totais", despesasContaCorrenteMes, "negative")}
+        ${cardSimples("Saldo Salários", saldo, saldo >= 0 ? "positive" : "negative")}
       </div>
-      ${rotuloGrupo("Resultado", true)}
-      ${cardSaldoDestaque}
     `;
 
     return {
