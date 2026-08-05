@@ -179,6 +179,7 @@
       </div>
     </div>
     <div id="fixos-por-fonte" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;"></div>
+    <div id="fixos-aviso-pendentes" style="display:none;"></div>
     <div class="card">
       <h3>Adicionar gasto fixo pago por boleto</h3>
       <form class="inline-form" id="form-fixos">
@@ -308,10 +309,12 @@
         <div><label>Descrição da compra</label><input type="text" name="descricao" required placeholder="Ex: Notebook" /></div>
         <div><label>Valor total (R$)</label><input type="number" step="0.01" name="valorTotal" required placeholder="0,00" /></div>
         <div><label>Quantidade de parcelas</label><input type="number" min="1" name="qtdParcelas" required placeholder="Ex: 10" /></div>
+        <div><label>Parcelas já pagas</label><input type="number" min="0" name="parcelasPagas" value="0" placeholder="Ex: 5" /></div>
         <div><button class="btn" type="submit">Adicionar</button></div>
       </form>
+      <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Se o parcelamento já está em andamento (ex: você já pagou 5 das 10 parcelas), preencha "Parcelas já pagas" — daí é só usar os botões +/− na tabela pra ir marcando cada parcela seguinte.</p>
       <table id="table-quitacao">
-        <thead><tr><th>Cartão</th><th>Descrição</th><th>Valor total</th><th>Parcelas</th><th>Valor da parcela</th><th>Quitada</th><th></th></tr></thead>
+        <thead><tr><th>Cartão</th><th>Descrição</th><th>Valor total</th><th>Progresso</th><th>Valor da parcela</th><th>Valor restante</th><th>Status</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>

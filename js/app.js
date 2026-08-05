@@ -250,6 +250,24 @@
       : "";
   }
 
+  // Avisa quanto do total exibido nesta aba está com o toggle "Pago"
+  // desligado — esse valor não entra nos gastos fixos somados no dashboard,
+  // então sem esse aviso os dois números parecem não bater.
+  function renderFixosAvisoPendentes(rows) {
+    const el = document.getElementById("fixos-aviso-pendentes");
+    if (!el) return;
+    const pendentes = rows.filter((r) => r.origem === "fixos" && !isPago(r));
+    const totalPendente = pendentes.reduce((s, r) => s + Number(r.valorMensal || 0), 0);
+    if (!pendentes.length) {
+      el.style.display = "none";
+      el.innerHTML = "";
+      return;
+    }
+    el.style.display = "block";
+    el.style.cssText = "display:block; background:#fff3cd; color:#7a5c00; padding:10px 14px; border-radius:10px; font-size:13px; margin-bottom:16px;";
+    el.innerHTML = `⚠️ ${UI.formatBRL(totalPendente)} (${pendentes.length} ${pendentes.length === 1 ? "conta" : "contas"}) ainda ${pendentes.length === 1 ? "está marcada" : "estão marcadas"} como pendente e não ${pendentes.length === 1 ? "entra" : "entram"} na soma de "Gastos fixos" do dashboard. Marque como "Pago" quando quitar para o valor aparecer lá.`;
+  }
+
   // Combina os gastos fixos por boleto com as assinaturas recorrentes do
   // cartão de crédito numa única lista, já que ambos são compromissos fixos.
   // O filtro de mês só se aplica às assinaturas do cartão (que têm data de
@@ -281,6 +299,7 @@
     const rows = filtrarPorFonte(filtrarPorGrupo([...boletos, ...cartaoRecorrentes], "fixos"), "fixos");
     setTabTotal("total-fixos-tab", rows.reduce((s, r) => s + Number(r.valorMensal || 0), 0));
     renderFixosPorFonte(rows);
+    renderFixosAvisoPendentes(rows);
 
     UI.renderTable(
       document.querySelector("#table-fixos tbody"),
@@ -410,16 +429,35 @@
   }
 
   // ---------- QUITAÇÃO DE PARCELAS ANTIGAS ----------
+  // Quantas parcelas já foram pagas, sempre limitado entre 0 e o total de
+  // parcelas. Compatível com o campo antigo "quitada" (checkbox único): se o
+  // item não tem "parcelasPagas" mas já estava marcado quitado, assume tudo pago.
+  function parcelasPagasDe(item) {
+    const total = Math.max(1, Number(item.qtdParcelas) || 1);
+    if (item.parcelasPagas !== undefined && item.parcelasPagas !== null && item.parcelasPagas !== "") {
+      return Math.min(Math.max(Number(item.parcelasPagas) || 0, 0), total);
+    }
+    const legadoQuitado = item.quitada === true || item.quitada === "true";
+    return legadoQuitado ? total : 0;
+  }
+
+  // Só é considerado quitado quando TODAS as parcelas foram marcadas como
+  // pagas — não dá pra marcar "quitado" direto, tem que ir parcela por parcela.
   function isQuitada(item) {
-    return item.quitada === true || item.quitada === "true";
+    const total = Math.max(1, Number(item.qtdParcelas) || 1);
+    return parcelasPagasDe(item) >= total;
   }
 
   function renderQuitacao() {
     // Itens em aberto primeiro, os já quitados vão para o final da lista.
     const rows = Store.get().quitacao.slice().sort((a, b) => Number(isQuitada(a)) - Number(isQuitada(b)));
-    const totalEmAberto = rows
-      .filter((r) => !isQuitada(r))
-      .reduce((s, r) => s + Number(r.valorTotal || 0), 0);
+
+    const totalEmAberto = rows.reduce((s, r) => {
+      const qtd = Math.max(1, Number(r.qtdParcelas) || 1);
+      const pagas = parcelasPagasDe(r);
+      const valorParcela = Number(r.valorTotal || 0) / qtd;
+      return s + valorParcela * (qtd - pagas);
+    }, 0);
     setTabTotal("total-quitacao-tab", totalEmAberto);
 
     UI.renderTable(
@@ -429,11 +467,32 @@
         { field: "cartao" },
         { field: "descricao" },
         { render: (r) => `<span class="value-out">${UI.formatBRL(r.valorTotal)}</span>` },
-        { field: "qtdParcelas" },
-        { render: (r) => UI.formatBRL(Number(r.valorTotal || 0) / Math.max(1, Number(r.qtdParcelas || 1))) },
+        {
+          render: (r) => {
+            const qtd = Math.max(1, Number(r.qtdParcelas) || 1);
+            const pagas = parcelasPagasDe(r);
+            return `
+              <div style="display:flex; align-items:center; gap:6px;">
+                <button type="button" class="btn secondary parcela-menos" data-id="${r.id}" style="padding:2px 9px;" ${pagas <= 0 ? "disabled" : ""}>−</button>
+                <span style="min-width:46px; text-align:center; font-weight:600;">${pagas}/${qtd}</span>
+                <button type="button" class="btn secondary parcela-mais" data-id="${r.id}" style="padding:2px 9px;" ${pagas >= qtd ? "disabled" : ""}>+</button>
+              </div>`;
+          }
+        },
+        { render: (r) => UI.formatBRL(Number(r.valorTotal || 0) / Math.max(1, Number(r.qtdParcelas) || 1)) },
+        {
+          render: (r) => {
+            const qtd = Math.max(1, Number(r.qtdParcelas) || 1);
+            const pagas = parcelasPagasDe(r);
+            const valorParcela = Number(r.valorTotal || 0) / qtd;
+            return UI.formatBRL(valorParcela * (qtd - pagas));
+          }
+        },
         {
           render: (r) =>
-            `<input type="checkbox" class="quitacao-checkbox" data-id="${r.id}" ${isQuitada(r) ? "checked" : ""} style="width:auto;" />`
+            isQuitada(r)
+              ? `<span class="tag" style="background:#e6f9ec; color:#1a7f3c;">Quitado</span>`
+              : `<span class="tag" style="background:#fff2e0; color:#a35b00;">Em aberto</span>`
         }
       ],
       [
@@ -454,17 +513,26 @@
       ]
     );
 
-    // O checkbox "Quitada" atualiza na hora, sem precisar reabrir o formulário.
-    document.querySelectorAll(".quitacao-checkbox").forEach((cb) => {
-      cb.addEventListener("change", async () => {
-        try {
-          await Store.updateItem("quitacao", cb.dataset.id, { quitada: cb.checked ? "true" : "false" });
-          renderQuitacao();
-          UI.toast(cb.checked ? "Marcado como quitado" : "Marcado como em aberto");
-        } catch (e) {
-          UI.toast(e.message, true);
-        }
-      });
+    // Os botões +/- atualizam a parcela paga na hora, sem precisar de formulário.
+    async function ajustarParcela(id, delta) {
+      const row = Store.get().quitacao.find((q) => String(q.id) === String(id));
+      if (!row) return;
+      const qtd = Math.max(1, Number(row.qtdParcelas) || 1);
+      const novo = Math.min(Math.max(parcelasPagasDe(row) + delta, 0), qtd);
+      try {
+        await Store.updateItem("quitacao", row.id, { parcelasPagas: String(novo) });
+        renderQuitacao();
+        UI.toast(novo >= qtd ? "Parcelamento quitado! 🎉" : delta > 0 ? "Parcela marcada como paga" : "Parcela desmarcada");
+      } catch (e) {
+        UI.toast(e.message, true);
+      }
+    }
+
+    document.querySelectorAll(".parcela-mais").forEach((btn) => {
+      btn.addEventListener("click", () => ajustarParcela(btn.dataset.id, 1));
+    });
+    document.querySelectorAll(".parcela-menos").forEach((btn) => {
+      btn.addEventListener("click", () => ajustarParcela(btn.dataset.id, -1));
     });
   }
 
