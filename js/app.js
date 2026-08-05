@@ -268,10 +268,11 @@
     el.innerHTML = `⚠️ ${UI.formatBRL(totalPendente)} (${pendentes.length} ${pendentes.length === 1 ? "conta" : "contas"}) ainda ${pendentes.length === 1 ? "está marcada" : "estão marcadas"} como pendente e não ${pendentes.length === 1 ? "entra" : "entram"} na soma de "Gastos fixos" do dashboard. Marque como "Pago" quando quitar para o valor aparecer lá.`;
   }
 
-  // Combina os gastos fixos por boleto com as assinaturas recorrentes do
-  // cartão de crédito numa única lista, já que ambos são compromissos fixos.
-  // O filtro de mês só se aplica às assinaturas do cartão (que têm data de
-  // cadastro) — os boletos são compromissos contínuos, sem mês específico.
+  // Combina os gastos fixos por boleto, as assinaturas recorrentes do cartão
+  // e as parcelas de parcelamentos antigos ainda em aberto (Quitação) numa
+  // única lista, já que os três são compromissos fixos mensais. O filtro de
+  // mês só se aplica às assinaturas do cartão (que têm data de cadastro) —
+  // boletos e parcelas antigas são compromissos contínuos, sem mês específico.
   function renderFixos() {
     const state = Store.get();
     const boletos = state.fixos.map((f) => ({
@@ -290,13 +291,32 @@
       fonte: "Cartão de crédito",
       vencimentoLabel: "—"
     }));
+    // Enquanto um parcelamento antigo não estiver 100% quitado, o valor da
+    // parcela atual conta como gasto fixo mensal — é dinheiro que sai da
+    // conta todo mês até o fim do parcelamento, então precisa aparecer aqui
+    // e entrar nas somas do dashboard, igual a um boleto ou uma assinatura.
+    const quitacaoEmAberto = (state.quitacao || [])
+      .filter((q) => !isQuitada(q))
+      .map((q) => {
+        const qtd = Math.max(1, Number(q.qtdParcelas) || 1);
+        const pagas = parcelasPagasDe(q);
+        return {
+          ...q,
+          origem: "quitacao",
+          categoria: "Parcelamento antigo",
+          valorMensal: Number(q.valorTotal || 0) / qtd,
+          formaPagamento: q.cartao ? `Cartão (${q.cartao})` : "Cartão de crédito",
+          fonte: "Cartão de crédito",
+          vencimentoLabel: `Parcela ${pagas + 1}/${qtd}`
+        };
+      });
 
     popularFiltroMes("filtro-mes-fixos", cartaoRecorrentesTodos, "data", "fixos", renderFixos);
     popularFiltroGrupo("filtro-grupo-fixos", "fixos", renderFixos);
     popularFiltroFonte("filtro-fonte-fixos", "fixos", renderFixos);
     const cartaoRecorrentes = filtrarPorMes(cartaoRecorrentesTodos, "data", "fixos");
 
-    const rows = filtrarPorFonte(filtrarPorGrupo([...boletos, ...cartaoRecorrentes], "fixos"), "fixos");
+    const rows = filtrarPorFonte(filtrarPorGrupo([...boletos, ...cartaoRecorrentes, ...quitacaoEmAberto], "fixos"), "fixos");
     setTabTotal("total-fixos-tab", rows.reduce((s, r) => s + Number(r.valorMensal || 0), 0));
     renderFixosPorFonte(rows);
     renderFixosAvisoPendentes(rows);
@@ -313,7 +333,7 @@
         { field: "vencimentoLabel" },
         {
           render: (r) =>
-            r.origem === "cartao"
+            r.origem === "cartao" || r.origem === "quitacao"
               ? `<span style="font-size:12px; color:var(--text-muted);">Automático</span>`
               : `<label class="toggle-switch">
                    <input type="checkbox" class="fixo-pago-toggle" data-id="${r.id}" ${isPago(r) ? "checked" : ""} />
@@ -326,8 +346,8 @@
           label: "Editar",
           className: "btn secondary",
           onClick: (row) => {
-            if (row.origem === "cartao") {
-              UI.toast('Este item vem do Cartão de crédito — edite por lá', true);
+            if (row.origem === "cartao" || row.origem === "quitacao") {
+              UI.toast("Este item vem do Cartão de crédito — edite por lá", true);
               switchView("cartao");
               return;
             }
@@ -341,12 +361,15 @@
             const msg =
               row.origem === "cartao"
                 ? "Este item vem da aba Cartão de crédito. Excluir?"
+                : row.origem === "quitacao"
+                ? "Este parcelamento vem da Quitação de parcelas antigas. Excluir o parcelamento inteiro?"
                 : "Excluir este gasto fixo?";
             if (!confirm(msg)) return;
             try {
               await Store.deleteItem(row.origem, row.id);
               renderFixos();
               if (row.origem === "cartao") renderCartao();
+              if (row.origem === "quitacao") renderQuitacao();
               Dashboard.render(Store.get());
               UI.toast("Gasto fixo excluído");
             } catch (e) {
@@ -504,6 +527,8 @@
             try {
               await Store.deleteItem("quitacao", row.id);
               renderQuitacao();
+              renderFixos();
+              Dashboard.render(Store.get());
               UI.toast("Parcelamento excluído");
             } catch (e) {
               UI.toast(e.message, true);
@@ -522,6 +547,10 @@
       try {
         await Store.updateItem("quitacao", row.id, { parcelasPagas: String(novo) });
         renderQuitacao();
+        // A parcela paga sai (ou entra) na lista de Gastos Fixos e nas somas
+        // do dashboard, então os dois precisam ser atualizados também.
+        renderFixos();
+        Dashboard.render(Store.get());
         UI.toast(novo >= qtd ? "Parcelamento quitado! 🎉" : delta > 0 ? "Parcela marcada como paga" : "Parcela desmarcada");
       } catch (e) {
         UI.toast(e.message, true);
@@ -830,7 +859,10 @@
     showConfigBannerIfNeeded();
 
     setupForm("form-poupanca", "poupanca", renderPoupanca);
-    setupForm("form-quitacao", "quitacao", renderQuitacao);
+    setupForm("form-quitacao", "quitacao", () => {
+      renderQuitacao();
+      renderFixos();
+    });
 
     receitasEditor = setupEditableForm("form-receitas", "receitas", renderReceitas);
     despesasEditor = setupEditableForm("form-despesas", "despesas", renderDespesas);

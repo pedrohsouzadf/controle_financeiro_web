@@ -118,6 +118,32 @@ const Dashboard = (() => {
       .reduce((sum, f) => sum + (Number(f.valorMensal) || 0), 0);
   }
 
+  // Quantas parcelas de um parcelamento antigo (Quitação) já foram pagas.
+  // Compatível com o campo antigo "quitada" (checkbox único).
+  function parcelasPagasDeQuitacao(item) {
+    const total = Math.max(1, Number(item.qtdParcelas) || 1);
+    if (item.parcelasPagas !== undefined && item.parcelasPagas !== null && item.parcelasPagas !== "") {
+      return Math.min(Math.max(Number(item.parcelasPagas) || 0, 0), total);
+    }
+    const legadoQuitado = item.quitada === true || item.quitada === "true";
+    return legadoQuitado ? total : 0;
+  }
+
+  function isQuitacaoQuitada(item) {
+    const total = Math.max(1, Number(item.qtdParcelas) || 1);
+    return parcelasPagasDeQuitacao(item) >= total;
+  }
+
+  // Soma o valor da parcela de cada parcelamento antigo ainda em aberto.
+  // Enquanto não estiver 100% quitado, essa parcela é um compromisso mensal
+  // real (dinheiro sai da conta todo mês) — por isso conta como gasto fixo,
+  // igual a um boleto ou uma assinatura recorrente do cartão.
+  function quitacaoMensal(state) {
+    return (state.quitacao || [])
+      .filter((q) => !isQuitacaoQuitada(q))
+      .reduce((s, q) => s + Number(q.valorTotal || 0) / Math.max(1, Number(q.qtdParcelas) || 1), 0);
+  }
+
   // Receitas recorrentes contam em todo mês a partir da data de cadastro.
   // Receitas não recorrentes contam só no mês exato da data informada.
   // "tipo" filtra por 'renda' ou 'beneficio'; sem filtro, soma tudo.
@@ -169,15 +195,18 @@ const Dashboard = (() => {
 
     const fixosMes = totalFixosMensal(state);
     const fixosContaCorrenteMes = totalFixosMensal(state, { apenasContaCorrente: true });
-    const gastosFixosTotais = fixosMes + cartaoRecorrenteMes;
+    // Parcelas de parcelamentos antigos (Quitação) ainda em aberto — contam
+    // como gasto fixo em dinheiro real, sempre pagas no cartão de crédito.
+    const quitacaoMes = quitacaoMensal(state);
+    const gastosFixosTotais = fixosMes + cartaoRecorrenteMes + quitacaoMes;
 
     // Total gasto de fato (todas as fontes) — só para referência/insights.
-    const totalDespesas = despesasDiaMes + cartaoMes + fixosMes;
+    const totalDespesas = despesasDiaMes + cartaoMes + fixosMes + quitacaoMes;
 
     // Saldo real: só considera receita de renda (dinheiro de verdade) menos
     // despesas pagas com conta corrente. Gastos cobertos por VA/CAJU não
     // entram aqui, porque também não entraram como "renda".
-    const despesasContaCorrenteMes = despesasDiaContaCorrenteMes + fixosContaCorrenteMes + cartaoMes;
+    const despesasContaCorrenteMes = despesasDiaContaCorrenteMes + fixosContaCorrenteMes + cartaoMes + quitacaoMes;
     const saldo = receitasRendaMes - despesasContaCorrenteMes;
 
     const saldoInicial = Number(state.config.saldoInicial || 0);
@@ -194,7 +223,7 @@ const Dashboard = (() => {
     // explícito o que é compromisso recorrente (boleto + assinatura no
     // cartão) e o que é gasto do dia a dia (inclusive compras avulsas no
     // cartão, que são variáveis mesmo sendo pagas com cartão).
-    const gastosFixosDinheiroMes = fixosContaCorrenteMes + cartaoRecorrenteMes;
+    const gastosFixosDinheiroMes = fixosContaCorrenteMes + cartaoRecorrenteMes + quitacaoMes;
     const gastosVariaveisDinheiroMes = despesasDiaContaCorrenteMes + (cartaoMes - cartaoRecorrenteMes);
 
     // Quanto ainda resta pra gastar em cada benefício (VA, CAJU) este mês —
@@ -489,7 +518,7 @@ const Dashboard = (() => {
         .filter((d) => monthKey(d.data) === m)
         .reduce((s, d) => s + Number(d.valor || 0), 0);
       const cartao = cartaoDoMes(state, m).reduce((s, d) => s + Number(d.valor || 0), 0);
-      return diaADia + cartao + totalFixosMensal(state);
+      return diaADia + cartao + totalFixosMensal(state) + quitacaoMensal(state);
     });
 
     const ctx = document.getElementById("chart-evolucao");
@@ -549,7 +578,7 @@ const Dashboard = (() => {
     if (kpis.gastosFixosTotais > 0 && kpis.receitasRendaMes > 0) {
       const pctFixos = ((kpis.gastosFixosTotais / kpis.receitasRendaMes) * 100).toFixed(0);
       insights.push(
-        `📄 Seus gastos fixos (boleto + cartão recorrente) representam ${pctFixos}% da sua renda mensal (${UI.formatBRL(kpis.gastosFixosTotais)}).`
+        `📄 Seus gastos fixos (boleto + cartão recorrente + parcelas antigas) representam ${pctFixos}% da sua renda mensal (${UI.formatBRL(kpis.gastosFixosTotais)}).`
       );
     }
 
