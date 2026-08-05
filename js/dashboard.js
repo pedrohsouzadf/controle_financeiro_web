@@ -7,6 +7,10 @@ const Dashboard = (() => {
   let chartEvolucao = null;
   let chartSimulacao = null;
 
+  // Mês selecionado no filtro do dashboard ("YYYY-MM"). Null = mês atual.
+  let mesSelecionado = null;
+  const NOMES_MES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
   function monthKey(dateStr) {
     if (!dateStr) return null;
     const s = String(dateStr).substring(0, 7); // YYYY-MM
@@ -16,6 +20,51 @@ const Dashboard = (() => {
   function currentMonthKey() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  // Mês efetivamente usado pelos cálculos do dashboard: o escolhido no
+  // filtro, ou o mês atual se nada foi selecionado ainda.
+  function mesAtivo() {
+    return mesSelecionado || currentMonthKey();
+  }
+
+  function formatarMesLabel(mesKey) {
+    const [y, m] = mesKey.split("-");
+    return `${NOMES_MES[Number(m) - 1]}/${y}`;
+  }
+
+  // Junta os meses que aparecem em receitas/despesas/cartão/poupança, mais o
+  // mês atual (garantido sempre presente, mesmo sem nenhum lançamento ainda).
+  function mesesDisponiveis(state) {
+    const meses = new Set([currentMonthKey()]);
+    const addFrom = (arr, field) => {
+      (arr || []).forEach((r) => {
+        const v = r[field];
+        if (v && /^\d{4}-\d{2}/.test(String(v))) meses.add(String(v).substring(0, 7));
+      });
+    };
+    addFrom(state.receitas, "data");
+    addFrom(state.despesas, "data");
+    addFrom(state.cartao, "data");
+    addFrom(state.poupanca, "data");
+    return [...meses].sort().reverse();
+  }
+
+  // Popula o <select> de mês do dashboard, preservando a seleção atual, e
+  // re-renderiza tudo quando o usuário troca de mês.
+  function popularFiltroMesDashboard(state) {
+    const select = document.getElementById("filtro-mes-dashboard");
+    if (!select) return;
+    const meses = mesesDisponiveis(state);
+    const atual = mesSelecionado || currentMonthKey();
+    const valorSelecionado = meses.includes(atual) ? atual : currentMonthKey();
+    select.innerHTML = meses.map((m) => `<option value="${m}">${formatarMesLabel(m)}</option>`).join("");
+    select.value = valorSelecionado;
+    mesSelecionado = valorSelecionado;
+    select.onchange = () => {
+      mesSelecionado = select.value;
+      render(state);
+    };
   }
 
   function isRecorrente(r) {
@@ -77,7 +126,7 @@ const Dashboard = (() => {
   }
 
   function renderKpis(state) {
-    const key = currentMonthKey();
+    const key = mesAtivo();
 
     const receitasRendaMes = receitasDoMes(state, key, "renda");
     const receitasBeneficioMes = receitasDoMes(state, key, "beneficio");
@@ -124,24 +173,45 @@ const Dashboard = (() => {
     const gastosFixosDinheiroMes = fixosContaCorrenteMes + cartaoRecorrenteMes;
     const gastosVariaveisDinheiroMes = despesasDiaContaCorrenteMes + (cartaoMes - cartaoRecorrenteMes);
 
-    const kpis = [
-      { label: "Total receitas - renda", value: receitasRendaMes, cls: "positive" },
-      { label: "Gastos fixos", value: gastosFixosDinheiroMes, cls: "negative" },
-      { label: "Gastos variáveis", value: gastosVariaveisDinheiroMes, cls: "negative" },
-      { label: "Gastos totais", value: despesasContaCorrenteMes, cls: "negative" },
-      { label: "Saldo total", value: saldo, cls: saldo >= 0 ? "positive" : "negative" }
-    ];
+    // Quanto ainda resta pra gastar em cada benefício (VA, CAJU) este mês —
+    // recebido menos já gasto, por fonte.
+    const fontesBeneficio = saldoPorFonte(state, key);
+    const saldoBeneficiosTotal = fontesBeneficio.reduce((s, f) => s + f.saldo, 0);
+
+    const cardSimples = (label, value, cls) => `
+      <div class="card">
+        <div class="kpi-label" style="text-transform:uppercase;">${label}</div>
+        <div class="kpi-value ${cls}">${UI.formatBRL(value)}</div>
+      </div>`;
+
+    const cardSaldoBeneficios = `
+      <div class="card">
+        <div class="kpi-label" style="text-transform:uppercase;">Saldo Benefícios</div>
+        <div class="kpi-value ${saldoBeneficiosTotal >= 0 ? "positive" : "negative"}">${UI.formatBRL(saldoBeneficiosTotal)}</div>
+        ${
+          fontesBeneficio.length
+            ? fontesBeneficio
+                .map(
+                  (f) => `
+          <div style="margin-top:6px; font-size:13px;">
+            ${UI.fonteBadge(f.nome)}
+            <span style="color:var(--text-muted);">restam ${UI.formatBRL(f.saldo)}</span>
+          </div>`
+                )
+                .join("")
+            : `<div style="font-size:12px; color:var(--text-muted); margin-top:6px;">Sem benefícios cadastrados neste mês.</div>`
+        }
+      </div>`;
 
     const el = document.getElementById("dashboard-kpis");
-    el.innerHTML = kpis
-      .map(
-        (k) => `
-      <div class="card">
-        <div class="kpi-label" style="text-transform:uppercase;">${k.label}</div>
-        <div class="kpi-value ${k.cls}">${UI.formatBRL(k.value)}</div>
-      </div>`
-      )
-      .join("");
+    el.innerHTML =
+      cardSimples("Total receitas - renda", receitasRendaMes, "positive") +
+      cardSimples("Total Benefícios", receitasBeneficioMes, "positive") +
+      cardSaldoBeneficios +
+      cardSimples("Gastos fixos", gastosFixosDinheiroMes, "negative") +
+      cardSimples("Gastos variáveis", gastosVariaveisDinheiroMes, "negative") +
+      cardSimples("Gastos totais", despesasContaCorrenteMes, "negative") +
+      cardSimples("Saldo total", saldo, saldo >= 0 ? "positive" : "negative");
 
     return {
       receitasMes,
@@ -191,36 +261,6 @@ const Dashboard = (() => {
       const gasto = gastoDiaADia + gastoFixos;
       return { nome, recebido, gasto, saldo: recebido - gasto };
     });
-  }
-
-  function renderSaldoFontes(state) {
-    const el = document.getElementById("dashboard-saldo-fontes");
-    if (!el) return;
-    const key = currentMonthKey();
-    const fontes = saldoPorFonte(state, key);
-
-    if (!fontes.length) {
-      el.innerHTML = "";
-      el.style.display = "none";
-      return;
-    }
-
-    el.style.display = "block";
-    el.innerHTML = `
-      <h3 style="text-transform:uppercase;">Benefícios - CAJU e VA</h3>
-      <div class="grid cols-3">
-        ${fontes
-          .map(
-            (f) => `
-          <div>
-            <div class="kpi-label">${UI.fonteBadge(f.nome)}</div>
-            <div class="kpi-value ${f.saldo >= 0 ? "positive" : "negative"}">${UI.formatBRL(f.saldo)}</div>
-            <div style="font-size:12px; color:var(--text-muted); margin-top:6px;">Recebido: ${UI.formatBRL(f.recebido)}</div>
-            <div style="font-size:20px; font-weight:700; color:var(--red); margin-top:2px;">Gasto: ${UI.formatBRL(f.gasto)}</div>
-          </div>`
-          )
-          .join("")}
-      </div>`;
   }
 
   // Teto de cada grupo (Necessidades/Desejos/Futuro) = % da soma de TODAS as
@@ -278,7 +318,7 @@ const Dashboard = (() => {
   function renderOrcamentoGrupos(state) {
     const el = document.getElementById("dashboard-orcamento-grupos");
     if (!el) return;
-    const key = currentMonthKey();
+    const key = mesAtivo();
     const grupos = orcamentoPorGrupo(state, key);
 
     el.innerHTML = `
@@ -305,7 +345,7 @@ const Dashboard = (() => {
   }
 
   function renderChartCategorias(state) {
-    const key = currentMonthKey();
+    const key = mesAtivo();
     const { diaADia, cartao, fixos } = allDespesasDoMes(state, key);
 
     const porCategoria = {};
@@ -423,7 +463,7 @@ const Dashboard = (() => {
     }
 
     // categoria com maior gasto
-    const key = currentMonthKey();
+    const key = mesAtivo();
     const { diaADia, cartao, fixos } = allDespesasDoMes(state, key);
     const porCategoria = {};
     [...diaADia, ...cartao].forEach((d) => {
@@ -457,8 +497,8 @@ const Dashboard = (() => {
   }
 
   function render(state) {
+    popularFiltroMesDashboard(state);
     const kpis = renderKpis(state);
-    renderSaldoFontes(state);
     renderOrcamentoGrupos(state);
     renderChartCategorias(state);
     renderChartEvolucao(state);

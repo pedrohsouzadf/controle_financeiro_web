@@ -31,15 +31,18 @@
 
   <!-- ===================== DASHBOARD ===================== -->
   <section id="view-dashboard" class="view active">
-    <div class="grid cols-3" id="dashboard-kpis"></div>
+    <div class="section-title-row">
+      <div class="section-title">Dashboard</div>
+      <select id="filtro-mes-dashboard" style="width:auto;"></select>
+    </div>
 
-    <div class="card" id="dashboard-saldo-fontes" style="margin-top:16px; display:none;"></div>
+    <div class="grid cols-3" id="dashboard-kpis"></div>
 
     <div class="card" id="dashboard-orcamento-grupos" style="margin-top:16px;"></div>
 
     <div class="grid cols-2" style="margin-top:16px;">
       <div class="card">
-        <h3>Despesas por categoria (mês atual)</h3>
+        <h3>Despesas por categoria</h3>
         <div class="chart-wrap"><canvas id="chart-categorias"></canvas></div>
       </div>
       <div class="card">
