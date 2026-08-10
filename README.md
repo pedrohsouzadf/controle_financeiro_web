@@ -120,36 +120,28 @@ git push
 
 ## Passo 6 — Lembrete diário no WhatsApp (opcional)
 
-Todo dia às 20h (horário de Brasília), uma Lambda separada (`aws/lambda/lembrete.mjs`) calcula seu saldo real do mês direto do DynamoDB e te manda uma mensagem de WhatsApp avisando o saldo e se você já lançou despesas hoje. Ela é disparada por um agendamento do EventBridge — nenhuma dependência de biblioteca não-oficial, é tudo API oficial da Meta (WhatsApp Cloud API).
-
-### 6.1 — Criar o template da mensagem
-
-No [WhatsApp Manager](https://business.facebook.com/wa/manage/message-templates/) do seu app Meta, crie um template novo:
-
-- **Nome**: `lembrete_financas_diario` (tem que bater com o nome usado no template.yaml)
-- **Categoria**: Utility (utilidade) — evita o preço mais caro de "Marketing"
-- **Idioma**: Português (BR)
-- **Corpo da mensagem**, com duas variáveis:
+Todo dia às 20h (horário de Brasília), uma Lambda separada (`aws/lambda/lembrete.mjs`) te manda uma mensagem fixa de WhatsApp lembrando de lançar as despesas do dia:
 
 ```
-Boa noite! 💰 Seu saldo real do mês é {{1}}. Você já lançou suas despesas de hoje? {{2}}. Não esqueça de revisar seu sistema de finanças.
+Boa noite! Você já lançou suas despesas de hoje? Não esqueça de revisar seu sistema de finanças.
 ```
 
-A aprovação da Meta costuma sair em minutos a poucas horas.
+Ela é disparada por um agendamento do EventBridge e envia a mensagem via [CallMeBot](https://www.callmebot.com), um serviço comunitário gratuito para automações pessoais — sem precisar de conta Meta Business/verificação de empresa (útil se sua conta Meta estiver restrita ou você não quiser lidar com aprovação de app). Essa mensagem é sempre a mesma, não consulta nada no DynamoDB.
 
-### 6.2 — Guardar o token de acesso no SSM Parameter Store
+> ⚠️ O CallMeBot é um serviço de terceiros, não-oficial, mantido por voluntários. É de graça e funciona bem para mandar mensagem só para o seu próprio número, mas pode ficar instável, ter fila de espera para novos usuários, ou mudar de regras sem aviso. Se algum dia ele parar de funcionar, dá pra voltar para a API oficial da Meta (guardamos a versão anterior no histórico do git) ou trocar por um lembrete via e-mail (Amazon SES).
 
-Pegue o **token de acesso** do seu app no painel da Meta (WhatsApp > Configuração da API) e salve com:
+### 6.1 — Ativar o CallMeBot no seu WhatsApp
 
-```bash
-aws ssm put-parameter --name "/financas/whatsapp-token" --type SecureString --value "SEU_TOKEN_DE_ACESSO"
-```
+1. Adicione o número do CallMeBot aos seus contatos: **+34 644 51 95 23**.
+2. Pelo WhatsApp, mande para esse número a mensagem:
+   ```
+   I allow callmebot to send me messages
+   ```
+3. Em alguns minutos você recebe de volta uma mensagem com sua **apikey** (um número). Guarde ela.
 
-> Se você estiver usando o número de teste gratuito da Meta, o token padrão expira em 24h. Para o lembrete não parar de funcionar sozinho, gere um **token permanente** criando um "System User" no Business Manager (Configurações do negócio > Usuários do sistema) e atribuindo a ele o app do WhatsApp — aí você gera um token sem validade.
->
-> Também é preciso cadastrar seu número como "destinatário de teste" no painel da Meta (WhatsApp > Introdução > "To"), senão as mensagens não chegam.
+Se não receber resposta, o serviço pode estar com fila cheia — tente de novo mais tarde (veja o aviso em [callmebot.com](https://www.callmebot.com/blog/free-api-whatsapp-messages/)).
 
-### 6.3 — Fazer o deploy com os novos parâmetros
+### 6.2 — Fazer o deploy com os novos parâmetros
 
 Como esse recurso adiciona parâmetros novos ao `template.yaml`, rode o deploy no modo guiado de novo (ele reaproveita as respostas anteriores como padrão, então é só apertar Enter nas que não mudaram):
 
@@ -160,22 +152,20 @@ sam deploy --guided
 ```
 
 Quando perguntar, informe:
-- **WhatsAppPhoneNumberId**: o "Phone number ID" do painel da Meta (WhatsApp > Introdução)
-- **WhatsAppRecipientNumber**: seu número, formato internacional sem símbolos (ex: `5561999999999`)
-- **WhatsAppTemplateName**: pode deixar o padrão `lembrete_financas_diario`
-- **WhatsAppTokenParamName**: pode deixar o padrão `/financas/whatsapp-token`
+- **WhatsAppRecipientNumber**: seu número (o mesmo que ativou o CallMeBot), formato internacional sem símbolos (ex: `5561999999999`)
+- **CallMeBotApiKey**: a apikey que você recebeu no passo anterior
 
-### 6.4 — Testar sem esperar o horário
+### 6.3 — Testar sem esperar o horário
 
 ```bash
 aws lambda invoke --function-name $(aws cloudformation describe-stack-resources --stack-name meu-financeiro --logical-resource-id LembreteFunction --query "StackResources[0].PhysicalResourceId" --output text) /tmp/saida.json && cat /tmp/saida.json
 ```
 
-Se der erro, o `cat /tmp/saida.json` mostra a mensagem — os erros mais comuns são token expirado, número de destinatário não cadastrado como testador, ou nome do template diferente do que foi aprovado.
+Se der erro, o `cat /tmp/saida.json` mostra a resposta do CallMeBot — os erros mais comuns são apikey incorreta ou número que nunca mandou a mensagem de ativação do passo 6.1.
 
 ### Custo
 
-Mensagens de categoria "Utility" no Brasil custam cerca de R$ 0,035 cada — um lembrete diário sai por menos de R$ 1,10/mês. Se você estiver usando o número de teste gratuito da Meta (só para os números cadastrados como testador), pode não ser cobrado; confirme o status de cobrança do seu app no painel da Meta.
+Gratuito — sem limite de mensagens para o seu próprio número, sem cartão de crédito, sem cobrança da AWS além do já previsto (a Lambda roda 1x por dia, bem dentro do free tier).
 
 ---
 

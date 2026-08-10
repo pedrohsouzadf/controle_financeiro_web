@@ -11,6 +11,17 @@ Parameters:
     MinLength: 16
     Description: "Chave secreta que o site vai enviar no header x-api-key em toda\
       \ requisi\xE7\xE3o. Gere uma com: openssl rand -hex 24\n"
+  WhatsAppRecipientNumber:
+    Type: String
+    Description: "Seu n\xFAmero de WhatsApp que vai receber o lembrete (o mesmo n\xFA\
+      mero que voc\xEA usou para ativar o CallMeBot), no formato internacional sem\
+      \ espa\xE7os/s\xEDmbolos. Ex: 5561999999999\n"
+  CallMeBotApiKey:
+    Type: String
+    NoEcho: true
+    Description: "Apikey que o CallMeBot te enviou por WhatsApp depois de voc\xEA\
+      \ mandar a mensagem de ativa\xE7\xE3o para o n\xFAmero deles. Veja o Passo 6\
+      \ do README.\n"
 Globals:
   Function:
     Timeout: 10
@@ -66,6 +77,28 @@ Resources:
             Method: post
     Metadata:
       SamResourceId: FinancasFunction
+  LembreteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: LembreteFunction
+      Handler: lembrete.handler
+      Timeout: 15
+      Environment:
+        Variables:
+          CALLMEBOT_PHONE:
+            Ref: WhatsAppRecipientNumber
+          CALLMEBOT_APIKEY:
+            Ref: CallMeBotApiKey
+      Events:
+        LembreteDiario:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 23 * * ? *)
+            Description: "Lembrete di\xE1rio no WhatsApp \xE0s 20h (hor\xE1rio de\
+              \ Bras\xEDlia)"
+            Enabled: true
+    Metadata:
+      SamResourceId: LembreteFunction
   FinancasHttpApi:
     Type: AWS::Serverless::HttpApi
     Properties:

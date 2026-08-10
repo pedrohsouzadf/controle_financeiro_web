@@ -504,12 +504,35 @@ const Dashboard = (() => {
     });
   }
 
+  // Mês mais antigo com algum lançamento real (receita, despesa, cartão ou
+  // poupança) — usado pra não desenhar barras de despesa em meses anteriores
+  // ao começo do uso do sistema (gastos fixos/parcelas antigas não têm data
+  // de cadastro, então sem esse corte eles apareceriam "fantasma" em todo
+  // mês do gráfico, mesmo sem nenhum dado real registrado ali).
+  function primeiroMesComDados(state) {
+    const meses = new Set();
+    const addFrom = (arr, field) => {
+      (arr || []).forEach((r) => {
+        const v = r[field];
+        if (v && /^\d{4}-\d{2}/.test(String(v))) meses.add(String(v).substring(0, 7));
+      });
+    };
+    addFrom(state.receitas, "data");
+    addFrom(state.despesas, "data");
+    addFrom(state.cartao, "data");
+    addFrom(state.poupanca, "data");
+    if (!meses.size) return currentMonthKey();
+    return [...meses].sort()[0];
+  }
+
   function renderChartEvolucao(state) {
+    const primeiroMes = primeiroMesComDados(state);
     const months = [];
     const now = new Date();
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (key >= primeiroMes) months.push(key);
     }
 
     const receitasSerie = months.map((m) => receitasDoMes(state, m));

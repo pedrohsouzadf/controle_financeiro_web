@@ -13,33 +13,19 @@ Parameters:
       Chave secreta que o site vai enviar no header x-api-key em toda
       requisição. Gere uma com: openssl rand -hex 24
 
-  WhatsAppPhoneNumberId:
-    Type: String
-    Description: >
-      ID do número de telefone do WhatsApp Cloud API (Meta), encontrado no
-      painel do app em WhatsApp > Introdução.
-
   WhatsAppRecipientNumber:
     Type: String
     Description: >
-      Seu número de WhatsApp que vai receber o lembrete, no formato
-      internacional sem espaços/símbolos. Ex: 5561999999999
+      Seu número de WhatsApp que vai receber o lembrete (o mesmo número que
+      você usou para ativar o CallMeBot), no formato internacional sem
+      espaços/símbolos. Ex: 5561999999999
 
-  WhatsAppTemplateName:
+  CallMeBotApiKey:
     Type: String
-    Default: lembrete_financas_diario
+    NoEcho: true
     Description: >
-      Nome do template aprovado no WhatsApp Manager (Meta) usado para enviar
-      o lembrete diário.
-
-  WhatsAppTokenParamName:
-    Type: String
-    Default: /financas/whatsapp-token
-    Description: >
-      Nome do parâmetro no SSM Parameter Store (SecureString) onde o token
-      de acesso do WhatsApp Cloud API está guardado. Crie-o manualmente após
-      o deploy com:
-      aws ssm put-parameter --name "/financas/whatsapp-token" --type SecureString --value "SEU_TOKEN"
+      Apikey que o CallMeBot te enviou por WhatsApp depois de você mandar a
+      mensagem de ativação para o número deles. Veja o Passo 6 do README.
 
 Globals:
   Function:
@@ -92,8 +78,9 @@ Resources:
             Method: post
 
   # Envia todo dia às 20h (horário de Brasília, UTC-3, sem horário de verão)
-  # um lembrete no WhatsApp com o saldo real do mês e se já houve lançamento
-  # de despesas no dia, puxando os dados direto da tabela DynamoDB.
+  # um lembrete fixo no WhatsApp pra revisar as finanças do dia, via
+  # CallMeBot (não precisa de conta Meta Business). Não consulta o
+  # DynamoDB — a mensagem não depende de nenhum dado real.
   LembreteFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -102,18 +89,8 @@ Resources:
       Timeout: 15
       Environment:
         Variables:
-          TABLE_NAME: !Ref FinancasTable
-          WHATSAPP_TOKEN_PARAM: !Ref WhatsAppTokenParamName
-          PHONE_NUMBER_ID: !Ref WhatsAppPhoneNumberId
-          RECIPIENT_NUMBER: !Ref WhatsAppRecipientNumber
-          TEMPLATE_NAME: !Ref WhatsAppTemplateName
-      Policies:
-        - DynamoDBReadPolicy:
-            TableName: !Ref FinancasTable
-        - Statement:
-            - Effect: Allow
-              Action: ssm:GetParameter
-              Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${WhatsAppTokenParamName}"
+          CALLMEBOT_PHONE: !Ref WhatsAppRecipientNumber
+          CALLMEBOT_APIKEY: !Ref CallMeBotApiKey
       Events:
         LembreteDiario:
           Type: Schedule

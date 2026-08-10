@@ -7,6 +7,6 @@ architecture = "arm64"
 handler = "index.handler"
 manifest_hash = ""
 packagetype = "Zip"
-functions = ["FinancasFunction"]
+functions = ["FinancasFunction", "LembreteFunction"]
 
 [layer_build_definitions]
