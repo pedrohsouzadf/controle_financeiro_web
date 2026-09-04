@@ -1,6 +1,6 @@
 # Meu Financeiro
 
-Site pessoal para organizar suas finanças: receitas (inclusive recorrentes, como salário), despesas do dia a dia, gastos fixos (boleto), cartão de crédito, poupança com simulação, e um dashboard com insights. Os dados ficam salvos numa stack **AWS serverless** (API Gateway + Lambda + DynamoDB), e o site é hospedado gratuitamente no **GitHub Pages**.
+Site pessoal para organizar suas finanças: receitas (inclusive recorrentes, como salário), despesas (avulsas ou recorrentes, como aluguel), cartão de crédito, poupança com simulação, e um dashboard com insights. Os dados ficam salvos numa stack **AWS serverless** (API Gateway + Lambda + DynamoDB), e o site é hospedado gratuitamente no **GitHub Pages**.
 
 ---
 
@@ -215,9 +215,8 @@ Isso permite buscar todos os itens de um tipo com uma única `Query` (rápido e 
 ## Funcionalidades
 
 - **Receitas**: adicione e exclua entradas de dinheiro. Marque como "Recorrente" receitas fixas como salário — elas entram automaticamente no cálculo de todos os meses seguintes, sem precisar recadastrar. Receitas avulsas (freelance, etc.) contam só no mês da data informada.
-- **Despesas do dia a dia**: registre gastos variáveis por categoria.
-- **Gastos fixos (boleto)**: cadastre contas recorrentes com valor mensal e dia de vencimento.
-- **Cartão de crédito**: controle compras, parcelas e por qual cartão foram feitas.
+- **Despesas**: registre qualquer gasto por categoria. Marque como "Recorrente" contas fixas (aluguel, internet, academia) — elas entram automaticamente todo mês, sem precisar recadastrar. Também aparecem aqui, automaticamente: assinaturas recorrentes cadastradas no Cartão de crédito e as parcelas em aberto da Quitação de parcelas antigas.
+- **Cartão de crédito**: controle compras, parcelas e por qual cartão foram feitas. Inclui também a Quitação de parcelas antigas, pra organizar parcelamentos de compras passadas ainda não quitados.
 - **Poupança**: registre depósitos e retiradas, veja o total guardado.
 - **Simulação**: informe quanto quer guardar por mês e a rentabilidade esperada para projetar o valor futuro.
 - **Dashboard**: KPIs do mês, gráfico de despesas por categoria, evolução de receitas x despesas nos últimos 6 meses, e insights automáticos sobre seus hábitos financeiros.

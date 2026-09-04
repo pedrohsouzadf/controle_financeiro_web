@@ -24,7 +24,7 @@
   }
 
   // Referências preenchidas em init() — usadas pelos botões "Editar" das tabelas.
-  let receitasEditor, despesasEditor, fixosEditor, cartaoEditor;
+  let receitasEditor, despesasEditor, cartaoEditor;
 
   function setTabTotal(elId, value) {
     const el = document.getElementById(elId);
@@ -103,36 +103,6 @@
     return rows.filter((r) => Categories.grupoDaCategoria(r.categoria) === grupo);
   }
 
-  // ---------- FILTRO POR FONTE DE PAGAMENTO ----------
-  // Estado do filtro de fonte selecionado em cada aba ("todos" ou o nome
-  // exato da fonte). As opções são fixas — as mesmas oferecidas em cada
-  // formulário de cadastro.
-  const filtroFonte = { despesas: "todos", fixos: "todos" };
-  const FONTES_POR_ABA = {
-    despesas: ["Débito", "VA", "CAJU"],
-    fixos: ["Conta corrente", "VA", "CAJU", "Cartão de crédito"]
-  };
-
-  function popularFiltroFonte(selectId, filtroKey, onChange) {
-    const select = document.getElementById(selectId);
-    if (!select || select.dataset.populated) return;
-    select.dataset.populated = "true";
-    const opcoes = FONTES_POR_ABA[filtroKey].map((f) => `<option value="${f}">${f}</option>`).join("");
-    select.innerHTML = `<option value="todos">Todas as fontes</option>${opcoes}`;
-    select.value = filtroFonte[filtroKey];
-    select.onchange = () => {
-      filtroFonte[filtroKey] = select.value;
-      onChange();
-    };
-  }
-
-  function filtrarPorFonte(rows, filtroKey) {
-    const fonte = filtroFonte[filtroKey];
-    if (fonte === "todos") return rows;
-    const padrao = filtroKey === "despesas" ? "Débito" : "Conta corrente";
-    return rows.filter((r) => (r.fonte || padrao).trim().toLowerCase() === fonte.toLowerCase());
-  }
-
   // ---------- RECEITAS ----------
   function renderReceitas() {
     const all = UI.sortByDateDesc(Store.get().receitas);
@@ -146,12 +116,6 @@
         { render: (r) => UI.formatDate(r.data) },
         { field: "descricao" },
         { render: (r) => `<span class="tag">${r.categoria}</span>` },
-        {
-          render: (r) =>
-            r.tipo === "beneficio"
-              ? `<span class="tag" style="background:#fff2e0;color:#a35b00;">Benefício</span>`
-              : `<span class="tag">Renda</span>`
-        },
         { render: (r) => `<span class="value-in">${UI.formatBRL(r.valor)}</span>` },
         { render: (r) => (isRecorrente(r) ? `<span class="tag" style="background:#e6f9ec;color:#1a7f3c;">Recorrente</span>` : "") }
       ],
@@ -176,125 +140,66 @@
     );
   }
 
-  // ---------- DESPESAS DIA A DIA ----------
-  // Mostra, no cabeçalho da aba, o total gasto em cada fonte de pagamento
-  // (Débito, VA, CAJU — dentro do filtro de mês aplicado), como pílulas
-  // ordenadas do maior para o menor gasto.
-  function renderDespesasPorFonte(rows) {
-    const el = document.getElementById("despesas-por-fonte");
+  // ---------- DESPESAS ----------
+  // Aba única para qualquer gasto fora do cartão de crédito. Junta as
+  // despesas cadastradas aqui com três coisas que "moram" em outros lugares
+  // mas também são gastos: contas fixas antigas ainda não migradas (extinta
+  // aba Gastos Fixos), assinaturas recorrentes do cartão, e as parcelas de
+  // parcelamentos antigos ainda em aberto (Quitação). "Fixo" e "variável"
+  // não existem mais como conceitos separados — o que importa é só se o
+  // gasto é "Recorrente" (continua todo mês) ou não.
+  function renderDespesasMigracaoBanner(fixos) {
+    const el = document.getElementById("despesas-migracao-fixos");
     if (!el) return;
-    const porFonte = {};
-    rows.forEach((r) => {
-      const fonte = r.fonte || "Débito";
-      porFonte[fonte] = (porFonte[fonte] || 0) + Number(r.valor || 0);
-    });
-    const entradas = Object.entries(porFonte).sort((a, b) => b[1] - a[1]);
-    el.innerHTML = entradas.length
-      ? entradas.map(([fonte, val]) => UI.fonteBadge(fonte, `${fonte}: ${UI.formatBRL(val)}`)).join("")
-      : "";
-  }
-
-  function renderDespesas() {
-    const all = UI.sortByDateDesc(Store.get().despesas);
-    popularFiltroMes("filtro-mes-despesas", all, "data", "despesas", renderDespesas);
-    popularFiltroGrupo("filtro-grupo-despesas", "despesas", renderDespesas);
-    popularFiltroFonte("filtro-fonte-despesas", "despesas", renderDespesas);
-    const rows = filtrarPorFonte(filtrarPorGrupo(filtrarPorMes(all, "data", "despesas"), "despesas"), "despesas");
-    setTabTotal("total-despesas-tab", rows.reduce((s, r) => s + Number(r.valor || 0), 0));
-    renderDespesasPorFonte(rows);
-    UI.renderTable(
-      document.querySelector("#table-despesas tbody"),
-      rows,
-      [
-        { render: (r) => UI.formatDate(r.data) },
-        { field: "descricao" },
-        { render: (r) => `<span class="tag">${r.categoria}</span>` },
-        { render: (r) => UI.fonteBadge(r.fonte) },
-        { render: (r) => `<span class="value-out">${UI.formatBRL(r.valor)}</span>` }
-      ],
-      [
-        { label: "Editar", className: "btn secondary", onClick: (row) => despesasEditor.startEdit(row) },
-        {
-          label: "Excluir",
-          className: "btn danger",
-          onClick: async (row) => {
-            if (!confirm("Excluir esta despesa?")) return;
-            try {
-              await Store.deleteItem("despesas", row.id);
-              renderDespesas();
-              Dashboard.render(Store.get());
-              UI.toast("Despesa excluída");
-            } catch (e) {
-              UI.toast(e.message, true);
-            }
-          }
-        }
-      ]
-    );
-  }
-
-  // ---------- GASTOS FIXOS ----------
-  // Mostra, no cabeçalho da aba, o total mensal por fonte de pagamento
-  // (CAJU, VA, Conta corrente, Cartão de crédito) como pílulas.
-  function renderFixosPorFonte(rows) {
-    const el = document.getElementById("fixos-por-fonte");
-    if (!el) return;
-    const porFonte = {};
-    rows.forEach((r) => {
-      const fonte = r.fonte && r.fonte !== "—" ? r.fonte : "Conta corrente";
-      porFonte[fonte] = (porFonte[fonte] || 0) + Number(r.valorMensal || 0);
-    });
-    const entradas = Object.entries(porFonte).sort((a, b) => b[1] - a[1]);
-    el.innerHTML = entradas.length
-      ? entradas.map(([fonte, val]) => UI.fonteBadge(fonte, `${fonte}: ${UI.formatBRL(val)}`)).join("")
-      : "";
-  }
-
-  // Avisa quanto do total exibido nesta aba está com o toggle "Pago"
-  // desligado — esse valor não entra nos gastos fixos somados no dashboard,
-  // então sem esse aviso os dois números parecem não bater.
-  function renderFixosAvisoPendentes(rows) {
-    const el = document.getElementById("fixos-aviso-pendentes");
-    if (!el) return;
-    const pendentes = rows.filter((r) => r.origem === "fixos" && !isPago(r));
-    const totalPendente = pendentes.reduce((s, r) => s + Number(r.valorMensal || 0), 0);
+    const pendentes = (fixos || []).filter((f) => String(f.ativo) !== "false");
     if (!pendentes.length) {
       el.style.display = "none";
       el.innerHTML = "";
       return;
     }
-    el.style.display = "block";
-    el.style.cssText = "display:block; background:#fff3cd; color:#7a5c00; padding:10px 14px; border-radius:10px; font-size:13px; margin-bottom:16px;";
-    el.innerHTML = `⚠️ ${UI.formatBRL(totalPendente)} (${pendentes.length} ${pendentes.length === 1 ? "conta" : "contas"}) ainda ${pendentes.length === 1 ? "está marcada" : "estão marcadas"} como pendente e não ${pendentes.length === 1 ? "entra" : "entram"} na soma de "Gastos fixos" do dashboard. Marque como "Pago" quando quitar para o valor aparecer lá.`;
+    el.style.display = "flex";
+    el.style.cssText =
+      "display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; background:#e6f0fd; color:#0050b3; padding:10px 14px; border-radius:10px; font-size:13px; margin-bottom:16px;";
+    el.innerHTML = `
+      <span>💡 Você tem ${pendentes.length} ${pendentes.length === 1 ? "conta fixa antiga" : "contas fixas antigas"} da extinta aba "Gastos Fixos". Elas já aparecem na lista abaixo, mas migre pra essa aba nova pra poder editar normalmente.</span>
+      <button type="button" class="btn secondary" id="btn-migrar-fixos">Migrar gastos fixos antigos</button>
+    `;
+    document.getElementById("btn-migrar-fixos").addEventListener("click", migrarFixosAntigos);
   }
 
-  // Combina os gastos fixos por boleto, as assinaturas recorrentes do cartão
-  // e as parcelas de parcelamentos antigos ainda em aberto (Quitação) numa
-  // única lista, já que os três são compromissos fixos mensais. O filtro de
-  // mês só se aplica às assinaturas do cartão (que têm data de cadastro) —
-  // boletos e parcelas antigas são compromissos contínuos, sem mês específico.
-  function renderFixos() {
+  async function migrarFixosAntigos() {
+    const pendentes = Store.get().fixos.filter((f) => String(f.ativo) !== "false");
+    if (!pendentes.length) return;
+    if (!confirm(`Migrar ${pendentes.length} conta(s) fixa(s) antiga(s) pra essa aba nova? Cada uma vira uma despesa recorrente, e a versão antiga é removida.`)) return;
+    try {
+      for (const f of pendentes) {
+        await Store.addItem("despesas", {
+          data: new Date().toISOString().substring(0, 10),
+          descricao: f.descricao,
+          categoria: f.categoria || "Outros",
+          valor: f.valorMensal,
+          recorrente: "true"
+        });
+        await Store.deleteItem("fixos", f.id);
+      }
+      renderDespesas();
+      Dashboard.render(Store.get());
+      UI.toast("Contas fixas migradas com sucesso");
+    } catch (e) {
+      UI.toast(e.message, true);
+    }
+  }
+
+  function renderDespesas() {
     const state = Store.get();
-    const boletos = state.fixos.map((f) => ({
-      ...f,
-      origem: "fixos",
-      valorMensal: f.valorMensal,
-      formaPagamento: "Boleto",
-      fonte: f.fonte || "Conta corrente",
-      vencimentoLabel: `Dia ${f.diaVencimento}`
-    }));
-    const cartaoRecorrentesTodos = state.cartao.filter(isRecorrente).map((c) => ({
-      ...c,
-      origem: "cartao",
-      valorMensal: c.valor,
-      formaPagamento: c.cartao ? `Cartão (${c.cartao})` : "Cartão de crédito",
-      fonte: "Cartão de crédito",
-      vencimentoLabel: "—"
-    }));
-    // Enquanto um parcelamento antigo não estiver 100% quitado, o valor da
-    // parcela atual conta como gasto fixo mensal — é dinheiro que sai da
-    // conta todo mês até o fim do parcelamento, então precisa aparecer aqui
-    // e entrar nas somas do dashboard, igual a um boleto ou uma assinatura.
+    const despesasTodas = UI.sortByDateDesc(state.despesas).map((d) => ({ ...d, origem: "despesas" }));
+    const cartaoRecorrentesTodos = state.cartao.filter(isRecorrente).map((c) => ({ ...c, origem: "cartao", valor: c.valor }));
+
+    // Sem data específica — compromissos contínuos que sempre aparecem,
+    // independente do filtro de mês escolhido.
+    const boletosLegado = state.fixos
+      .filter((f) => String(f.ativo) !== "false")
+      .map((f) => ({ ...f, origem: "fixos", categoria: f.categoria, valor: f.valorMensal, recorrente: "true" }));
     const quitacaoEmAberto = (state.quitacao || [])
       .filter((q) => !isQuitada(q))
       .map((q) => {
@@ -303,55 +208,55 @@
         return {
           ...q,
           origem: "quitacao",
+          descricao: `${q.descricao} (parcela ${pagas + 1}/${qtd})`,
           categoria: "Parcelamento antigo",
-          valorMensal: Number(q.valorTotal || 0) / qtd,
-          formaPagamento: q.cartao ? `Cartão (${q.cartao})` : "Cartão de crédito",
-          fonte: "Cartão de crédito",
-          vencimentoLabel: `Parcela ${pagas + 1}/${qtd}`
+          valor: Number(q.valorTotal || 0) / qtd,
+          recorrente: "true"
         };
       });
 
-    popularFiltroMes("filtro-mes-fixos", cartaoRecorrentesTodos, "data", "fixos", renderFixos);
-    popularFiltroGrupo("filtro-grupo-fixos", "fixos", renderFixos);
-    popularFiltroFonte("filtro-fonte-fixos", "fixos", renderFixos);
-    const cartaoRecorrentes = filtrarPorMes(cartaoRecorrentesTodos, "data", "fixos");
+    const comData = [...despesasTodas, ...cartaoRecorrentesTodos];
+    popularFiltroMes("filtro-mes-despesas", comData, "data", "despesas", renderDespesas);
+    popularFiltroGrupo("filtro-grupo-despesas", "despesas", renderDespesas);
 
-    const rows = filtrarPorFonte(filtrarPorGrupo([...boletos, ...cartaoRecorrentes, ...quitacaoEmAberto], "fixos"), "fixos");
-    setTabTotal("total-fixos-tab", rows.reduce((s, r) => s + Number(r.valorMensal || 0), 0));
-    renderFixosPorFonte(rows);
-    renderFixosAvisoPendentes(rows);
+    const rows = [
+      ...filtrarPorGrupo(filtrarPorMes(comData, "data", "despesas"), "despesas"),
+      ...filtrarPorGrupo([...boletosLegado, ...quitacaoEmAberto], "despesas")
+    ];
+
+    setTabTotal("total-despesas-tab", rows.reduce((s, r) => s + Number(r.valor || 0), 0));
+    renderDespesasMigracaoBanner(state.fixos);
 
     UI.renderTable(
-      document.querySelector("#table-fixos tbody"),
+      document.querySelector("#table-despesas tbody"),
       rows,
       [
+        { render: (r) => (r.data ? UI.formatDate(r.data) : "—") },
         { field: "descricao" },
-        { render: (r) => `<span class="tag">${r.categoria}</span>` },
-        { field: "formaPagamento" },
-        { render: (r) => (r.fonte && r.fonte !== "—" ? UI.fonteBadge(r.fonte) : "—") },
-        { render: (r) => `<span class="value-out">${UI.formatBRL(r.valorMensal)}</span>` },
-        { field: "vencimentoLabel" },
-        {
-          render: (r) =>
-            r.origem === "cartao" || r.origem === "quitacao"
-              ? `<span style="font-size:12px; color:var(--text-muted);">Automático</span>`
-              : `<label class="toggle-switch">
-                   <input type="checkbox" class="fixo-pago-toggle" data-id="${r.id}" ${isPago(r) ? "checked" : ""} />
-                   <span class="toggle-slider"></span>
-                 </label>`
-        }
+        { render: (r) => `<span class="tag">${r.categoria || "Outros"}</span>` },
+        { render: (r) => `<span class="value-out">${UI.formatBRL(r.valor)}</span>` },
+        { render: (r) => (isRecorrente(r) ? `<span class="tag" style="background:#e6f9ec;color:#1a7f3c;">Recorrente</span>` : "") }
       ],
       [
         {
           label: "Editar",
           className: "btn secondary",
           onClick: (row) => {
-            if (row.origem === "cartao" || row.origem === "quitacao") {
+            if (row.origem === "cartao") {
               UI.toast("Este item vem do Cartão de crédito — edite por lá", true);
               switchView("cartao");
               return;
             }
-            fixosEditor.startEdit(row);
+            if (row.origem === "quitacao") {
+              UI.toast("Este item vem da Quitação de parcelas antigas — edite por lá", true);
+              switchView("cartao");
+              return;
+            }
+            if (row.origem === "fixos") {
+              UI.toast('Item antigo — clique em "Migrar gastos fixos antigos" acima pra poder editar', true);
+              return;
+            }
+            despesasEditor.startEdit(row);
           }
         },
         {
@@ -363,15 +268,15 @@
                 ? "Este item vem da aba Cartão de crédito. Excluir?"
                 : row.origem === "quitacao"
                 ? "Este parcelamento vem da Quitação de parcelas antigas. Excluir o parcelamento inteiro?"
-                : "Excluir este gasto fixo?";
+                : "Excluir esta despesa?";
             if (!confirm(msg)) return;
             try {
               await Store.deleteItem(row.origem, row.id);
-              renderFixos();
+              renderDespesas();
               if (row.origem === "cartao") renderCartao();
               if (row.origem === "quitacao") renderQuitacao();
               Dashboard.render(Store.get());
-              UI.toast("Gasto fixo excluído");
+              UI.toast("Despesa excluída");
             } catch (e) {
               UI.toast(e.message, true);
             }
@@ -379,21 +284,6 @@
         }
       ]
     );
-
-    // Toggle "Pago" atualiza na hora — o dashboard só soma esse gasto fixo
-    // no total do mês enquanto ele estiver marcado como pago.
-    document.querySelectorAll(".fixo-pago-toggle").forEach((cb) => {
-      cb.addEventListener("change", async () => {
-        try {
-          await Store.updateItem("fixos", cb.dataset.id, { pago: cb.checked ? "true" : "false" });
-          renderFixos();
-          Dashboard.render(Store.get());
-          UI.toast(cb.checked ? "Marcado como pago" : "Marcado como pendente");
-        } catch (e) {
-          UI.toast(e.message, true);
-        }
-      });
-    });
   }
 
   // ---------- CARTÃO DE CRÉDITO ----------
@@ -439,7 +329,7 @@
             try {
               await Store.deleteItem("cartao", row.id);
               renderCartao();
-              renderFixos();
+              renderDespesas();
               Dashboard.render(Store.get());
               UI.toast("Lançamento excluído");
             } catch (e) {
@@ -527,7 +417,7 @@
             try {
               await Store.deleteItem("quitacao", row.id);
               renderQuitacao();
-              renderFixos();
+              renderDespesas();
               Dashboard.render(Store.get());
               UI.toast("Parcelamento excluído");
             } catch (e) {
@@ -547,9 +437,9 @@
       try {
         await Store.updateItem("quitacao", row.id, { parcelasPagas: String(novo) });
         renderQuitacao();
-        // A parcela paga sai (ou entra) na lista de Gastos Fixos e nas somas
+        // A parcela paga sai (ou entra) na lista de Despesas e nas somas
         // do dashboard, então os dois precisam ser atualizados também.
-        renderFixos();
+        renderDespesas();
         Dashboard.render(Store.get());
         UI.toast(novo >= qtd ? "Parcelamento quitado! 🎉" : delta > 0 ? "Parcela marcada como paga" : "Parcela desmarcada");
       } catch (e) {
@@ -626,13 +516,6 @@
   // ---------- HELPERS ----------
   function isRecorrente(item) {
     return item.recorrente === true || item.recorrente === "true" || item.recorrente === "on";
-  }
-
-  // Um gasto fixo é considerado "pago" por padrão (registros antigos não têm
-  // esse campo ainda) — só vira "pendente" quando explicitamente marcado
-  // como false pelo toggle da aba Gastos Fixos.
-  function isPago(item) {
-    return item.pago !== false && item.pago !== "false";
   }
 
   // ---------- FORM HANDLERS ----------
@@ -861,15 +744,14 @@
     setupForm("form-poupanca", "poupanca", renderPoupanca);
     setupForm("form-quitacao", "quitacao", () => {
       renderQuitacao();
-      renderFixos();
+      renderDespesas();
     });
 
     receitasEditor = setupEditableForm("form-receitas", "receitas", renderReceitas);
     despesasEditor = setupEditableForm("form-despesas", "despesas", renderDespesas);
-    fixosEditor = setupEditableForm("form-fixos", "fixos", renderFixos);
     cartaoEditor = setupEditableForm("form-cartao", "cartao", () => {
       renderCartao();
-      renderFixos();
+      renderDespesas();
     });
 
     setupCartaoRecorrenteToggle();
@@ -884,7 +766,6 @@
 
     renderReceitas();
     renderDespesas();
-    renderFixos();
     renderCartao();
     renderQuitacao();
     renderPoupanca();

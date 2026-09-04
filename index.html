@@ -20,8 +20,7 @@
   <nav class="tabs">
     <button data-view="dashboard" class="active">Dashboard</button>
     <button data-view="receitas">Receitas</button>
-    <button data-view="despesas">Despesas do dia a dia</button>
-    <button data-view="fixos">Gastos Fixos</button>
+    <button data-view="despesas">Despesas</button>
     <button data-view="cartao">Cartão de crédito</button>
     <button data-view="poupanca">Poupança &amp; Simulação</button>
   </nav>
@@ -37,8 +36,6 @@
     </div>
 
     <div id="dashboard-kpis"></div>
-
-    <div class="card" id="dashboard-orcamento-grupos" style="margin-top:16px;"></div>
 
     <div class="grid cols-2" style="margin-top:16px;">
       <div class="card">
@@ -82,44 +79,36 @@
           </select>
         </div>
         <div><label>Valor (R$)</label><input type="number" step="0.01" name="valor" required placeholder="0,00" /></div>
-        <div>
-          <label>Tipo</label>
-          <select name="tipo">
-            <option value="renda">Renda (dinheiro real)</option>
-            <option value="beneficio">Benefício (VA, CAJU...)</option>
-          </select>
-        </div>
         <div style="display:flex; align-items:center; gap:6px; padding-bottom:9px;">
           <input type="checkbox" name="recorrente" id="receita-recorrente" style="width:auto;" />
           <label for="receita-recorrente" style="margin:0;">Recorrente (todo mês)</label>
         </div>
         <div><button class="btn" type="submit">Adicionar</button></div>
       </form>
-      <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Marque "Recorrente" para receitas fixas como salário — assim ela entra automaticamente no cálculo todos os meses, sem precisar cadastrar de novo. Use "Benefício" para VA, CAJU e afins: eles contam no saldo por benefício, mas não entram no seu saldo real (afinal, não podem virar poupança).</p>
+      <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Marque "Recorrente" para receitas fixas como salário, VA, CAJU — assim ela entra automaticamente no cálculo todos os meses, sem precisar cadastrar de novo.</p>
       <table id="table-receitas">
-        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Tipo</th><th>Valor</th><th></th><th></th></tr></thead>
+        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th></th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
   </section>
 
-  <!-- ===================== DESPESAS DIA A DIA ===================== -->
+  <!-- ===================== DESPESAS ===================== -->
   <section id="view-despesas" class="view">
     <div class="section-title-row">
-      <div class="section-title">Despesas do dia a dia</div>
+      <div class="section-title">Despesas</div>
       <div style="display:flex; align-items:center; gap:10px;">
         <select id="filtro-mes-despesas" style="width:auto;"></select>
         <select id="filtro-grupo-despesas" style="width:auto;"></select>
-        <select id="filtro-fonte-despesas" style="width:auto;"></select>
         <div class="kpi-value" id="total-despesas-tab" style="font-size:18px;">R$ 0,00</div>
       </div>
     </div>
-    <div id="despesas-por-fonte" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;"></div>
+    <div id="despesas-migracao-fixos" style="display:none;"></div>
     <div class="card">
       <h3>Adicionar despesa</h3>
       <form class="inline-form" id="form-despesas">
         <div><label>Data</label><input type="date" name="data" required /></div>
-        <div><label>Descrição</label><input type="text" name="descricao" required placeholder="Ex: Almoço" /></div>
+        <div><label>Descrição</label><input type="text" name="descricao" required placeholder="Ex: Almoço, Aluguel" /></div>
         <div>
           <label>Categoria</label>
           <select name="categoria">
@@ -149,85 +138,15 @@
           </select>
         </div>
         <div><label>Valor (R$)</label><input type="number" step="0.01" name="valor" required placeholder="0,00" /></div>
-        <div>
-          <label>Fonte de pagamento</label>
-          <select name="fonte">
-            <option>Débito</option>
-            <option>VA</option>
-            <option>CAJU</option>
-          </select>
+        <div style="display:flex; align-items:center; gap:6px; padding-bottom:9px;">
+          <input type="checkbox" name="recorrente" id="despesa-recorrente" style="width:auto;" />
+          <label for="despesa-recorrente" style="margin:0;">Recorrente (todo mês, ex: aluguel, assinatura)</label>
         </div>
         <div><button class="btn" type="submit">Adicionar</button></div>
       </form>
-      <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Gastos pagos no cartão de crédito devem ser lançados na aba "Cartão de crédito", não aqui — assim eles não contam duas vezes. "Débito" conta como dinheiro de verdade no seu saldo. "VA" e "CAJU" entram no saldo daquele benefício, não no seu saldo real.</p>
+      <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Gastos pagos no cartão de crédito devem ser lançados na aba "Cartão de crédito", não aqui — assim eles não contam duas vezes. Marque "Recorrente" para contas fixas (aluguel, internet, academia) — elas entram automaticamente todo mês, sem precisar recadastrar.</p>
       <table id="table-despesas">
-        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Fonte</th><th>Valor</th><th></th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- ===================== GASTOS FIXOS ===================== -->
-  <section id="view-fixos" class="view">
-    <div class="section-title-row">
-      <div class="section-title">Gastos Fixos</div>
-      <div style="display:flex; align-items:center; gap:10px;">
-        <select id="filtro-mes-fixos" style="width:auto;"></select>
-        <select id="filtro-grupo-fixos" style="width:auto;"></select>
-        <select id="filtro-fonte-fixos" style="width:auto;"></select>
-        <div class="kpi-value" id="total-fixos-tab" style="font-size:18px;">R$ 0,00</div>
-      </div>
-    </div>
-    <div id="fixos-por-fonte" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;"></div>
-    <div id="fixos-aviso-pendentes" style="display:none;"></div>
-    <div class="card">
-      <h3>Adicionar gasto fixo pago por boleto</h3>
-      <form class="inline-form" id="form-fixos">
-        <div><label>Descrição</label><input type="text" name="descricao" required placeholder="Ex: Aluguel" /></div>
-        <div>
-          <label>Categoria</label>
-          <select name="categoria">
-            <optgroup label="Necessidades (50%)">
-              <option>Moradia</option>
-              <option>Contas Básicas</option>
-              <option>Alimentação Básica</option>
-              <option>Saúde</option>
-              <option>Transporte</option>
-              <option>Educação</option>
-            </optgroup>
-            <optgroup label="Desejos e Estilo de Vida (30%)">
-              <option>Lazer</option>
-              <option>Alimentação Fora</option>
-              <option>Assinaturas</option>
-              <option>Compras Pessoais</option>
-              <option>Outros</option>
-            </optgroup>
-            <optgroup label="Investimentos (20%)">
-              <option>Dívidas/Financiamento</option>
-              <option>Reserva de Emergência</option>
-              <option>Investimentos</option>
-            </optgroup>
-            <optgroup label="Gastos Extraordinários">
-              <option>Gastos Extraordinários</option>
-            </optgroup>
-          </select>
-        </div>
-        <div><label>Valor mensal (R$)</label><input type="number" step="0.01" name="valorMensal" required placeholder="0,00" /></div>
-        <div><label>Dia de vencimento</label><input type="number" min="1" max="31" name="diaVencimento" required placeholder="Ex: 10" /></div>
-        <div>
-          <label>Fonte de pagamento</label>
-          <select name="fonte">
-            <option>Conta corrente</option>
-            <option>VA</option>
-            <option>CAJU</option>
-            <option>Cartão de crédito</option>
-          </select>
-        </div>
-        <div><button class="btn" type="submit">Adicionar</button></div>
-      </form>
-      <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Assinaturas fixas cobradas no cartão (academia, streaming, seguro) não são cadastradas aqui — marque "Recorrente" na aba <strong>Cartão de crédito</strong> e elas aparecem automaticamente nesta lista também.</p>
-      <table id="table-fixos">
-        <thead><tr><th>Descrição</th><th>Categoria</th><th>Forma de pagamento</th><th>Fonte</th><th>Valor mensal</th><th>Vencimento</th><th>Pago</th><th></th></tr></thead>
+        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th></th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>

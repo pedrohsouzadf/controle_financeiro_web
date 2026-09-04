@@ -75,32 +75,5 @@ const UI = (() => {
     return [...rows].sort((a, b) => new Date(b[field]) - new Date(a[field]));
   }
 
-  // Cor fixa por tipo de pagamento, usada em toda a interface (tabelas,
-  // pílulas de resumo, dashboard) para reconhecer de relance se um gasto é
-  // dinheiro de verdade, cartão, VA ou CAJU — sem precisar ler o texto.
-  const FONTE_CORES = {
-    dinheiro: { bg: "#e6f9ec", color: "#1a7f3c" }, // verde — débito / conta corrente
-    cartao: { bg: "#e6f0fd", color: "#0050b3" }, // azul — cartão de crédito
-    va: { bg: "#fff2e0", color: "#a35b00" }, // laranja — VA
-    caju: { bg: "#f5e9ff", color: "#7a1fa2" } // roxo — CAJU
-  };
-
-  function tipoFonte(fonte) {
-    const f = (fonte || "").trim().toLowerCase();
-    if (!f || f === "débito" || f === "debito" || f === "conta corrente" || f === "contacorrente") return "dinheiro";
-    if (f === "cartão de crédito" || f === "cartao de credito") return "cartao";
-    if (f === "va") return "va";
-    if (f === "caju") return "caju";
-    return null; // fonte desconhecida — mantém a etiqueta cinza padrão
-  }
-
-  function fonteBadge(fonte, label) {
-    const texto = label || fonte || "Débito";
-    const tipo = tipoFonte(fonte);
-    if (!tipo) return `<span class="tag">${texto}</span>`;
-    const { bg, color } = FONTE_CORES[tipo];
-    return `<span class="tag" style="background:${bg}; color:${color};">${texto}</span>`;
-  }
-
-  return { toast, formatBRL, formatDate, renderTable, sortByDateDesc, fonteBadge };
+  return { toast, formatBRL, formatDate, renderTable, sortByDateDesc };
 })();
