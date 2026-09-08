@@ -11,6 +11,12 @@ const Dashboard = (() => {
   let mesSelecionado = null;
   const NOMES_MES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
+  // Modo do dashboard: "mensal" trava tudo no mês atual e esconde o filtro
+  // (visão rápida de "como estou indo esse mês"); "geral" mostra o filtro
+  // de mês e deixa escolher qualquer período pra olhar pra trás. Começa em
+  // "mensal" — é a checagem mais comum ao abrir o app.
+  let modoDashboard = "mensal";
+
   function monthKey(dateStr) {
     if (!dateStr) return null;
     const s = String(dateStr).substring(0, 7); // YYYY-MM
@@ -22,10 +28,36 @@ const Dashboard = (() => {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   }
 
-  // Mês efetivamente usado pelos cálculos do dashboard: o escolhido no
-  // filtro, ou o mês atual se nada foi selecionado ainda.
+  // Mês efetivamente usado pelos cálculos do dashboard: na "visão mensal"
+  // é sempre o mês atual; na "visão geral" é o escolhido no filtro (ou o
+  // mês atual se nada foi selecionado ainda).
   function mesAtivo() {
+    if (modoDashboard === "mensal") return currentMonthKey();
     return mesSelecionado || currentMonthKey();
+  }
+
+  // Alterna entre "Visão geral" (com filtro de mês) e "Visão mensal" (travada
+  // no mês atual, sem filtro). Puramente de navegação — não muda nenhum
+  // cálculo, só qual mês entra em mesAtivo().
+  function renderModoToggle() {
+    const btnGeral = document.getElementById("btn-dashboard-geral");
+    const btnMensal = document.getElementById("btn-dashboard-mensal");
+    const filtro = document.getElementById("filtro-mes-dashboard");
+    if (!btnGeral || !btnMensal) return;
+
+    btnGeral.classList.toggle("active", modoDashboard === "geral");
+    btnMensal.classList.toggle("active", modoDashboard === "mensal");
+    if (filtro) filtro.style.display = modoDashboard === "geral" ? "" : "none";
+
+    btnGeral.onclick = () => {
+      modoDashboard = "geral";
+      render(Store.get());
+    };
+    btnMensal.onclick = () => {
+      modoDashboard = "mensal";
+      mesSelecionado = currentMonthKey();
+      render(Store.get());
+    };
   }
 
   function formatarMesLabel(mesKey) {
@@ -55,6 +87,9 @@ const Dashboard = (() => {
   function popularFiltroMesDashboard(state) {
     const select = document.getElementById("filtro-mes-dashboard");
     if (!select) return;
+    // Na "visão mensal" o filtro fica escondido (controlado por
+    // renderModoToggle) e o mês é sempre o atual — não precisa popular nada.
+    if (modoDashboard === "mensal") return;
     const meses = mesesDisponiveis(state);
     const atual = mesSelecionado || currentMonthKey();
     const valorSelecionado = meses.includes(atual) ? atual : currentMonthKey();
@@ -386,6 +421,7 @@ const Dashboard = (() => {
   }
 
   function render(state) {
+    renderModoToggle();
     popularFiltroMesDashboard(state);
     const kpis = renderKpis(state);
     renderChartCategorias(state);

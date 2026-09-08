@@ -38,6 +38,9 @@ const Api = (() => {
   const remove = (sheet, id) => post({ action: "delete", sheet, id });
   const update = (sheet, id, data) => post({ action: "update", sheet, id, data });
   const setConfig = (chave, valor) => post({ action: "setConfig", chave, valor });
+  // Botão "Atualizar" da aba Despesas: pede pro backend ir buscar
+  // transações novas na Pluggy (Open Finance) e lançar como despesa/receita.
+  const syncPluggy = () => post({ action: "syncPluggy" });
 
-  return { isConfigured, getAll, add, remove, update, setConfig };
+  return { isConfigured, getAll, add, remove, update, setConfig, syncPluggy };
 })();

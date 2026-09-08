@@ -169,6 +169,46 @@ Gratuito — sem limite de mensagens para o seu próprio número, sem cartão de
 
 ---
 
+## Passo 7 — Open Finance: importar transações do banco e do cartão (opcional)
+
+O sistema pode puxar automaticamente as transações da sua conta corrente e do seu cartão de crédito, via [Pluggy](https://www.pluggy.ai) (uma iniciadora de Open Finance regulada pelo Banco Central), e lançar cada uma como Despesa ou Receita — com categoria adivinhada por palavra-chave (editável depois, igual qualquer lançamento manual).
+
+Isso roda automaticamente 1x por dia (madrugada) e também sob demanda, pelo botão **🔄 Atualizar** na aba Despesas.
+
+> ⚠️ A categorização automática é só uma sugestão por palavra-chave (não usa o categorizador pago da Pluggy) — revise e ajuste quando precisar. Compras no cartão só entram como despesa quando são a compra em si; o pagamento da fatura não vira lançamento novo (as compras que a compõem já foram lançadas individualmente).
+
+### 7.1 — Conectar suas contas no Meu Pluggy
+
+1. Crie uma conta gratuita em [meu.pluggy.ai](https://meu.pluggy.ai) e conecte sua conta bancária e seu cartão de crédito (login direto com o banco, via Open Finance). Isso é de graça e sem prazo de expiração, pra uso pessoal.
+
+### 7.2 — Pegar as credenciais no Dashboard da Pluggy
+
+1. Crie uma conta em [dashboard.pluggy.ai](https://dashboard.pluggy.ai).
+2. Você já tem uma aplicação de desenvolvimento criada por padrão (ex: "Pluggy Demo App") — anote o **Client ID** e revele o **Client Secret**.
+3. Clique no ícone de "play" (▷) dessa aplicação pra abrir o widget de conexão.
+4. Na busca de instituição, procure por **"Meu Pluggy"** (não escolha seu banco direto — isso exigiria liberação de dados reais, que a aplicação de desenvolvimento não tem). Faça login com a conta que você criou no passo 7.1.
+5. Autorize o acesso. Repita esse passo pra cada banco diferente que você tem conectado no Meu Pluggy (se conta e cartão forem do mesmo banco, geralmente vêm juntos numa conexão só).
+6. Cada conexão feita aparece listada na aplicação, com um **itemId** (um código tipo `de7bbf5a-abf2-47e4-94b1-586b36758423`) — copie o itemId de cada uma.
+
+### 7.3 — Fazer o deploy com os novos parâmetros
+
+```bash
+cd aws
+sam build
+sam deploy --guided
+```
+
+Quando perguntar, informe:
+- **PluggyClientId**: o Client ID da sua aplicação no Dashboard da Pluggy
+- **PluggyClientSecret**: o Client Secret da mesma aplicação
+- **PluggyItemIds**: os itemId's das conexões do passo 7.2, separados por vírgula (ex: `de7bbf5a-abf2-47e4-94b1-586b36758423,a5c763cb-0952-457b-9936-630f79c5b016`)
+
+### Custo
+
+Gratuito pra uso pessoal, sem prazo de expiração (a Pluggy cobra só de quem usa a API pra atender clientes/produto comercial).
+
+---
+
 ## Atualizando o backend depois
 
 Sempre que você editar `aws/lambda/index.mjs` ou `aws/template.yaml`, rode de novo dentro da pasta `aws`:
@@ -198,8 +238,10 @@ financas-app/
 └── aws/
     ├── template.yaml          # Infraestrutura como código (AWS SAM)
     └── lambda/
-        ├── index.mjs           # Função Lambda da API (all/add/delete/update/setConfig)
+        ├── index.mjs           # Função Lambda da API (all/add/delete/update/setConfig/syncPluggy)
         ├── lembrete.mjs        # Função Lambda do lembrete diário no WhatsApp
+        ├── pluggy.mjs          # Lógica compartilhada da sincronização com a Pluggy (Open Finance)
+        ├── pluggy-sync.mjs     # Função Lambda da sincronização diária automática
         └── package.json        # Dependências da Lambda (AWS SDK v3)
 ```
 
@@ -207,7 +249,7 @@ financas-app/
 
 A tabela `meu-financeiro` usa single-table design:
 
-- **Partition key (`pk`)**: o tipo do item — `RECEITAS`, `DESPESAS`, `FIXOS`, `CARTAO`, `POUPANCA`, `QUITACAO` ou `CONFIG`.
+- **Partition key (`pk`)**: o tipo do item — `RECEITAS`, `DESPESAS`, `FIXOS`, `CARTAO`, `POUPANCA`, `QUITACAO`, `CONFIG` ou `PLUGGY_SYNC` (controle interno de deduplicação da sincronização com a Pluggy — não aparece na tela).
 - **Sort key (`sk`)**: o `id` do item (ou a chave de configuração, no caso de `CONFIG`).
 
 Isso permite buscar todos os itens de um tipo com uma única `Query` (rápido e barato), em vez de varrer a tabela inteira.
@@ -215,7 +257,7 @@ Isso permite buscar todos os itens de um tipo com uma única `Query` (rápido e 
 ## Funcionalidades
 
 - **Receitas**: adicione e exclua entradas de dinheiro. Marque como "Recorrente" receitas fixas como salário — elas entram automaticamente no cálculo de todos os meses seguintes, sem precisar recadastrar. Receitas avulsas (freelance, etc.) contam só no mês da data informada.
-- **Despesas**: registre qualquer gasto por categoria. Marque como "Recorrente" contas fixas (aluguel, internet, academia) — elas entram automaticamente todo mês, sem precisar recadastrar. Também aparecem aqui, automaticamente: assinaturas recorrentes cadastradas no Cartão de crédito e as parcelas em aberto da Quitação de parcelas antigas.
+- **Despesas**: registre qualquer gasto por categoria. Marque como "Recorrente" contas fixas (aluguel, internet, academia) — elas entram automaticamente todo mês, sem precisar recadastrar. Também aparecem aqui, automaticamente: assinaturas recorrentes cadastradas no Cartão de crédito e as parcelas em aberto da Quitação de parcelas antigas. Se você configurar o Open Finance (Passo 7), as transações do banco e do cartão também entram sozinhas, marcadas com a tag "🔄 Importado".
 - **Cartão de crédito**: controle compras, parcelas e por qual cartão foram feitas. Inclui também a Quitação de parcelas antigas, pra organizar parcelamentos de compras passadas ainda não quitados.
 - **Poupança**: registre depósitos e retiradas, veja o total guardado.
 - **Simulação**: informe quanto quer guardar por mês e a rentabilidade esperada para projetar o valor futuro.

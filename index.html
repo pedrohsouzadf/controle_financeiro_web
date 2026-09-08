@@ -30,9 +30,15 @@
 
   <!-- ===================== DASHBOARD ===================== -->
   <section id="view-dashboard" class="view active">
-    <div class="section-title-row">
+    <div class="section-title-row" style="flex-wrap:wrap; gap:10px;">
       <div class="section-title">Dashboard</div>
-      <select id="filtro-mes-dashboard" style="width:auto;"></select>
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <select id="filtro-mes-dashboard" style="width:auto;"></select>
+        <div style="display:flex; gap:4px;">
+          <button type="button" class="btn secondary" id="btn-dashboard-geral">Visão geral</button>
+          <button type="button" class="btn secondary" id="btn-dashboard-mensal">Visão mensal</button>
+        </div>
+      </div>
     </div>
 
     <div id="dashboard-kpis"></div>
@@ -95,11 +101,12 @@
 
   <!-- ===================== DESPESAS ===================== -->
   <section id="view-despesas" class="view">
-    <div class="section-title-row">
+    <div class="section-title-row" style="flex-wrap:wrap; gap:10px;">
       <div class="section-title">Despesas</div>
-      <div style="display:flex; align-items:center; gap:10px;">
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
         <select id="filtro-mes-despesas" style="width:auto;"></select>
         <select id="filtro-grupo-despesas" style="width:auto;"></select>
+        <button type="button" class="btn secondary" id="btn-sync-pluggy" title="Busca transações novas do banco/cartão conectados via Open Finance">🔄 Atualizar</button>
         <div class="kpi-value" id="total-despesas-tab" style="font-size:18px;">R$ 0,00</div>
       </div>
     </div>

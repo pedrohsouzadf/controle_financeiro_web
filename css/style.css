@@ -192,6 +192,7 @@ button.btn {
 }
 button.btn:hover { opacity: 0.85; }
 button.btn.secondary { background: #eceef1; color: var(--text); }
+button.btn.secondary.active { background: var(--text); color: #fff; }
 button.btn.danger { background: transparent; color: var(--red); padding: 6px 10px; font-weight: 500; }
 button.btn.danger:hover { background: #fdeceb; }
 

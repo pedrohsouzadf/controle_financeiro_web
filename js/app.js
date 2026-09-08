@@ -117,7 +117,7 @@
         { field: "descricao" },
         { render: (r) => `<span class="tag">${r.categoria}</span>` },
         { render: (r) => `<span class="value-in">${UI.formatBRL(r.valor)}</span>` },
-        { render: (r) => (isRecorrente(r) ? `<span class="tag" style="background:#e6f9ec;color:#1a7f3c;">Recorrente</span>` : "") }
+        { render: (r) => tagsOrigemLancamento(r) }
       ],
       [
         { label: "Editar", className: "btn secondary", onClick: (row) => receitasEditor.startEdit(row) },
@@ -236,7 +236,7 @@
         { field: "descricao" },
         { render: (r) => `<span class="tag">${r.categoria || "Outros"}</span>` },
         { render: (r) => `<span class="value-out">${UI.formatBRL(r.valor)}</span>` },
-        { render: (r) => (isRecorrente(r) ? `<span class="tag" style="background:#e6f9ec;color:#1a7f3c;">Recorrente</span>` : "") }
+        { render: (r) => tagsOrigemLancamento(r) }
       ],
       [
         {
@@ -636,6 +636,17 @@
     return item.recorrente === true || item.recorrente === "true" || item.recorrente === "on";
   }
 
+  // Badges de "Recorrente" e/ou "Importado" (veio automaticamente da
+  // sincronização com a Pluggy/Open Finance) numa célula só.
+  function tagsOrigemLancamento(r) {
+    const tags = [];
+    if (isRecorrente(r)) tags.push(`<span class="tag" style="background:#e6f9ec;color:#1a7f3c;">Recorrente</span>`);
+    if (r.origemImportacao === "pluggy") {
+      tags.push(`<span class="tag" style="background:#eef2ff;color:#4338ca;">🔄 Importado</span>`);
+    }
+    return tags.join(" ");
+  }
+
   // ---------- FORM HANDLERS ----------
   function formToObject(form) {
     const data = {};
@@ -854,6 +865,38 @@
     });
   }
 
+  // ---------- SINCRONIZAÇÃO COM A PLUGGY (OPEN FINANCE) ----------
+  // Botão "Atualizar" da aba Despesas: pede pro backend buscar transações
+  // novas do banco/cartão conectados e lançar automaticamente. A
+  // sincronização diária automática já roda sozinha (Lambda agendada) —
+  // esse botão é só pra quando o usuário quer forçar uma busca na hora.
+  function setupSyncPluggy() {
+    const btn = document.getElementById("btn-sync-pluggy");
+    if (!btn) return;
+    const textoOriginal = btn.textContent;
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      btn.textContent = "Sincronizando…";
+      try {
+        const res = await Api.syncPluggy();
+        await Store.refresh();
+        renderReceitas();
+        renderDespesas();
+        Dashboard.render(Store.get());
+        const msg =
+          res.importadas > 0
+            ? `${res.importadas} ${res.importadas === 1 ? "transação nova importada" : "transações novas importadas"}`
+            : "Nada novo por enquanto — já está tudo atualizado";
+        UI.toast(msg);
+      } catch (e) {
+        UI.toast("Erro ao sincronizar: " + e.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = textoOriginal;
+      }
+    });
+  }
+
   async function init() {
     Store.loadCache();
     setupNav();
@@ -873,6 +916,7 @@
     });
 
     setupCartaoRecorrenteToggle();
+    setupSyncPluggy();
     const poupancaConfig = setupPoupancaConfig();
     setupSimulacao();
 
