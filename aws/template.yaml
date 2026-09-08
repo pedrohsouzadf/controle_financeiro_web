@@ -75,10 +75,11 @@ Resources:
     Properties:
       CodeUri: lambda/
       Handler: index.handler
-      # O botão "Atualizar" (ação syncPluggy) chama a API da Pluggy antes de
-      # responder — folga em relação ao padrão de 10s, mas ainda dentro do
-      # limite de ~30s do API Gateway pra uma resposta síncrona.
-      Timeout: 25
+      # O botão "Atualizar" (ação syncPluggy) chama a API da Pluggy várias
+      # vezes antes de responder (transações + faturas + investimentos) —
+      # folga em relação ao padrão de 10s, ainda dentro do limite de ~30s
+      # do API Gateway pra uma resposta síncrona.
+      Timeout: 28
       Environment:
         Variables:
           TABLE_NAME: !Ref FinancasTable

@@ -86,16 +86,30 @@ async function getConfig() {
 }
 
 async function handleGetAll() {
-  const [receitas, despesas, fixos, cartao, poupanca, quitacao, config] = await Promise.all([
-    queryByType("RECEITAS"),
-    queryByType("DESPESAS"),
-    queryByType("FIXOS"),
-    queryByType("CARTAO"),
-    queryByType("POUPANCA"),
-    queryByType("QUITACAO"),
-    getConfig()
-  ]);
-  return response(200, { ok: true, receitas, despesas, fixos, cartao, poupanca, quitacao, config });
+  const [receitas, despesas, fixos, cartao, poupanca, quitacao, config, pluggyFaturas, pluggyInvestimentos] =
+    await Promise.all([
+      queryByType("RECEITAS"),
+      queryByType("DESPESAS"),
+      queryByType("FIXOS"),
+      queryByType("CARTAO"),
+      queryByType("POUPANCA"),
+      queryByType("QUITACAO"),
+      getConfig(),
+      queryByType("PLUGGY_FATURA"),
+      queryByType("PLUGGY_INVESTIMENTO")
+    ]);
+  return response(200, {
+    ok: true,
+    receitas,
+    despesas,
+    fixos,
+    cartao,
+    poupanca,
+    quitacao,
+    config,
+    pluggyFaturas,
+    pluggyInvestimentos
+  });
 }
 
 async function handleAdd(body) {

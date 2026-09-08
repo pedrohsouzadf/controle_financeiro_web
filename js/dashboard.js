@@ -5,7 +5,6 @@
 const Dashboard = (() => {
   let chartCategorias = null;
   let chartEvolucao = null;
-  let chartSimulacao = null;
 
   // Mês selecionado no filtro do dashboard ("YYYY-MM"). Null = mês atual.
   let mesSelecionado = null;
@@ -429,44 +428,5 @@ const Dashboard = (() => {
     renderInsights(state, kpis);
   }
 
-  function simular({ inicial, mensal, taxaMensalPct, meses }) {
-    const taxa = taxaMensalPct / 100;
-    let saldo = inicial;
-    const serie = [saldo];
-    for (let m = 1; m <= meses; m++) {
-      saldo = saldo * (1 + taxa) + mensal;
-      serie.push(saldo);
-    }
-    const totalAportado = inicial + mensal * meses;
-    const totalJuros = saldo - totalAportado;
-    return { saldoFinal: saldo, totalAportado, totalJuros, serie };
-  }
-
-  function renderChartSimulacao(serie) {
-    const ctx = document.getElementById("chart-simulacao");
-    if (chartSimulacao) chartSimulacao.destroy();
-    chartSimulacao = new Chart(ctx, {
-      type: "line",
-      data: {
-        labels: serie.map((_, i) => `Mês ${i}`),
-        datasets: [
-          {
-            label: "Valor acumulado",
-            data: serie,
-            borderColor: "#0071e3",
-            backgroundColor: "rgba(0,113,227,0.1)",
-            fill: true,
-            tension: 0.3
-          }
-        ]
-      },
-      options: {
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true } }
-      }
-    });
-  }
-
-  return { render, simular, renderChartSimulacao };
+  return { render };
 })();

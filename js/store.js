@@ -13,7 +13,9 @@ const Store = (() => {
     cartao: [],
     poupanca: [],
     quitacao: [],
-    config: {}
+    config: {},
+    pluggyFaturas: [],
+    pluggyInvestimentos: []
   };
 
   function loadCache() {
@@ -46,7 +48,9 @@ const Store = (() => {
       cartao: data.cartao || [],
       poupanca: data.poupanca || [],
       quitacao: data.quitacao || [],
-      config: data.config || {}
+      config: data.config || {},
+      pluggyFaturas: data.pluggyFaturas || [],
+      pluggyInvestimentos: data.pluggyInvestimentos || []
     };
     saveCache();
     return state;

@@ -24,7 +24,7 @@
   }
 
   // Referências preenchidas em init() — usadas pelos botões "Editar" das tabelas.
-  let receitasEditor, despesasEditor, cartaoEditor;
+  let receitasEditor, despesasEditor;
 
   function setTabTotal(elId, value) {
     const el = document.getElementById(elId);
@@ -244,8 +244,7 @@
           className: "btn secondary",
           onClick: (row) => {
             if (row.origem === "cartao") {
-              UI.toast("Este item vem do Cartão de crédito — edite por lá", true);
-              switchView("cartao");
+              UI.toast("Item antigo do cartão (cadastro manual) — não dá mais pra editar, só excluir", true);
               return;
             }
             if (row.origem === "quitacao") {
@@ -404,59 +403,65 @@
     });
   }
 
-  // ---------- CARTÃO DE CRÉDITO ----------
-  // Mostra, no cabeçalho da aba, quanto do total é recorrente (assinaturas
-  // fixas) e quanto é variável (compras avulsas, parceladas ou não).
-  function renderCartaoRecorrenteVariavel(rows) {
-    const el = document.getElementById("cartao-recorrente-variavel");
-    if (!el) return;
-    const recorrenteTotal = rows.filter(isRecorrente).reduce((s, r) => s + Number(r.valor || 0), 0);
-    const variavelTotal = rows.filter((r) => !isRecorrente(r)).reduce((s, r) => s + Number(r.valor || 0), 0);
-    el.innerHTML = `
-      <span class="tag" style="background:#e6f9ec; color:#1a7f3c;">Recorrente: ${UI.formatBRL(recorrenteTotal)}</span>
-      <span class="tag" style="background:#e6f0fd; color:#0050b3;">Variável: ${UI.formatBRL(variavelTotal)}</span>
-    `;
-  }
-
+  // ---------- CARTÃO DE CRÉDITO (dados do Pluggy / Open Finance) ----------
+  // Só leitura: mostra o total de cada fatura trazida pela sincronização
+  // com a Pluggy e as compras que a compõem. Não existe mais cadastro
+  // manual aqui — um cartão sem conexão deve ser lançado na aba Despesas.
   function renderCartao() {
-    const all = UI.sortByDateDesc(Store.get().cartao);
-    popularFiltroMes("filtro-mes-cartao", all, "data", "cartao", renderCartao);
-    popularFiltroGrupo("filtro-grupo-cartao", "cartao", renderCartao);
-    const rows = filtrarPorGrupo(filtrarPorMes(all, "data", "cartao"), "cartao");
-    setTabTotal("total-cartao-tab", rows.reduce((s, r) => s + Number(r.valor || 0), 0));
-    renderCartaoRecorrenteVariavel(rows);
-    UI.renderTable(
-      document.querySelector("#table-cartao tbody"),
-      rows,
-      [
-        { render: (r) => UI.formatDate(r.data) },
-        { field: "descricao" },
-        { render: (r) => `<span class="tag">${r.categoria}</span>` },
-        { field: "cartao" },
-        { render: (r) => (isRecorrente(r) ? "—" : `${r.parcelaAtual || 1}/${r.parcelasTotal || 1}`) },
-        { render: (r) => `<span class="value-out">${UI.formatBRL(r.valor)}</span>` },
-        { render: (r) => (isRecorrente(r) ? `<span class="tag" style="background:#e6f9ec;color:#1a7f3c;">Recorrente</span>` : "") }
-      ],
-      [
-        { label: "Editar", className: "btn secondary", onClick: (row) => cartaoEditor.startEdit(row) },
-        {
-          label: "Excluir",
-          className: "btn danger",
-          onClick: async (row) => {
-            if (!confirm("Excluir este lançamento do cartão?")) return;
-            try {
-              await Store.deleteItem("cartao", row.id);
-              renderCartao();
-              renderDespesas();
-              Dashboard.render(Store.get());
-              UI.toast("Lançamento excluído");
-            } catch (e) {
-              UI.toast(e.message, true);
-            }
-          }
-        }
-      ]
-    );
+    const faturas = (Store.get().pluggyFaturas || [])
+      .slice()
+      .sort((a, b) => String(b.dueDate || "").localeCompare(String(a.dueDate || "")));
+
+    const total = faturas.reduce((s, f) => s + Number(f.totalAmount || 0), 0);
+    setTabTotal("total-cartao-tab", total);
+
+    const vazioEl = document.getElementById("cartao-pluggy-vazio");
+    const listaEl = document.getElementById("cartao-pluggy-faturas");
+    if (!listaEl) return;
+
+    if (!faturas.length) {
+      if (vazioEl) vazioEl.style.display = "block";
+      listaEl.innerHTML = "";
+      return;
+    }
+    if (vazioEl) vazioEl.style.display = "none";
+
+    listaEl.innerHTML = faturas
+      .map((f) => {
+        const compras = f.compras || [];
+        const linhasCompras = compras.length
+          ? compras
+              .map(
+                (c) => `
+                  <tr>
+                    <td>${UI.formatDate(c.data)}</td>
+                    <td>${c.descricao}</td>
+                    <td><span class="value-out">${UI.formatBRL(c.valor)}</span></td>
+                  </tr>`
+              )
+              .join("")
+          : `<tr><td colspan="3" class="empty-state">Nenhuma compra encontrada nessa fatura</td></tr>`;
+
+        return `
+          <div class="card" style="margin-bottom:16px;">
+            <div class="section-title-row" style="margin-bottom:8px;">
+              <div>
+                <h3 style="margin:0;">${f.contaNome || "Cartão"}</h3>
+                <p style="font-size:12px; color:var(--text-muted); margin:2px 0 0;">
+                  ${f.dueDate ? `Vencimento: ${UI.formatDate(f.dueDate)}` : "Fatura em aberto"}
+                  ${f.billClosingDate ? ` · Fechada em ${UI.formatDate(f.billClosingDate)}` : ""}
+                </p>
+              </div>
+              <div class="kpi-value" style="font-size:18px;">${UI.formatBRL(f.totalAmount)}</div>
+            </div>
+            <table>
+              <thead><tr><th>Data</th><th>Descrição</th><th>Valor</th></tr></thead>
+              <tbody>${linhasCompras}</tbody>
+            </table>
+          </div>
+        `;
+      })
+      .join("");
   }
 
   // ---------- QUITAÇÃO DE PARCELAS ANTIGAS ----------
@@ -631,6 +636,55 @@
     );
   }
 
+  // ---------- INVESTIMENTOS (dados do Pluggy / Open Finance) ----------
+  const TIPOS_INVESTIMENTO = {
+    FIXED_INCOME: "Renda Fixa",
+    MUTUAL_FUND: "Fundo",
+    EQUITY: "Ações/FIIs",
+    ETF: "ETF",
+    SECURITY: "Previdência",
+    COE: "COE",
+    OTHER: "Outro"
+  };
+
+  function renderInvestimentosPluggy() {
+    const investimentos = (Store.get().pluggyInvestimentos || [])
+      .slice()
+      .sort((a, b) => Number(b.valor || 0) - Number(a.valor || 0));
+
+    const total = investimentos.reduce((s, i) => s + Number(i.valor || 0), 0);
+    const totalEl = document.getElementById("total-investimentos-pluggy");
+    if (totalEl) totalEl.textContent = UI.formatBRL(total);
+
+    const vazioEl = document.getElementById("investimentos-pluggy-vazio");
+    const cardEl = document.getElementById("investimentos-pluggy-card");
+    if (!cardEl) return;
+
+    if (!investimentos.length) {
+      if (vazioEl) vazioEl.style.display = "block";
+      cardEl.style.display = "none";
+      return;
+    }
+    if (vazioEl) vazioEl.style.display = "none";
+    cardEl.style.display = "block";
+
+    UI.renderTable(
+      document.querySelector("#table-investimentos-pluggy tbody"),
+      investimentos,
+      [
+        { field: "nome" },
+        { render: (i) => `<span class="tag">${TIPOS_INVESTIMENTO[i.tipo] || i.tipo || "Outro"}</span>` },
+        { render: (i) => `<span class="value-in">${UI.formatBRL(i.valor)}</span>` },
+        {
+          render: (i) =>
+            i.rentabilidadeUltimos12Meses != null ? `${Number(i.rentabilidadeUltimos12Meses).toFixed(2)}%` : "—"
+        },
+        { render: (i) => (i.dataAtualizacao ? UI.formatDate(i.dataAtualizacao) : "—") }
+      ],
+      []
+    );
+  }
+
   // ---------- HELPERS ----------
   function isRecorrente(item) {
     return item.recorrente === true || item.recorrente === "true" || item.recorrente === "on";
@@ -744,33 +798,6 @@
     return { startEdit };
   }
 
-  // Quando "Recorrente" é marcado no cartão, desabilita e zera os campos de
-  // parcela (assinaturas não têm número de parcelas).
-  function setupCartaoRecorrenteToggle() {
-    const checkbox = document.getElementById("cartao-recorrente");
-    const parcelaAtualInput = document.querySelector('#form-cartao [name="parcelaAtual"]');
-    const parcelasTotalInput = document.querySelector('#form-cartao [name="parcelasTotal"]');
-    const wrap1 = document.getElementById("cartao-parcela-atual-wrap");
-    const wrap2 = document.getElementById("cartao-parcelas-total-wrap");
-
-    function apply() {
-      const recorrente = checkbox.checked;
-      [parcelaAtualInput, parcelasTotalInput].forEach((input) => {
-        input.disabled = recorrente;
-      });
-      [wrap1, wrap2].forEach((wrap) => {
-        wrap.style.opacity = recorrente ? "0.4" : "1";
-      });
-      if (recorrente) {
-        parcelaAtualInput.value = "1";
-        parcelasTotalInput.value = "1";
-      }
-    }
-
-    checkbox.addEventListener("change", apply);
-    apply();
-  }
-
   // Salva o saldo inicial já guardado e a meta de investimento mensal
   // (ambos ficam gravados na aba Config da planilha/DynamoDB), controlados
   // por um painel lateral aberto através do ícone de engrenagem.
@@ -814,7 +841,6 @@
         await Store.setConfigValue("saldoInicial", saldoInput.value || "0");
         await Store.setConfigValue("metaInvestimentoMensal", metaInput.value || "0");
         renderPoupanca();
-        preencherSimulacaoComPadroes();
         Dashboard.render(Store.get());
         UI.toast("Configurações salvas");
         closePanel();
@@ -825,44 +851,6 @@
     });
 
     return { preencherComConfigAtual };
-  }
-
-  // Pré-preenche a simulação com o total guardado atual e a meta mensal
-  // configurada, sem sobrescrever se o usuário já estiver mexendo nos campos.
-  function preencherSimulacaoComPadroes() {
-    const simInicial = document.getElementById("sim-inicial");
-    const simMensal = document.getElementById("sim-mensal");
-    const config = Store.get().config || {};
-    if (simInicial && !simInicial.value) simInicial.value = totalGuardadoAtual().toFixed(2);
-    if (simMensal && !simMensal.value && config.metaInvestimentoMensal) {
-      simMensal.value = Number(config.metaInvestimentoMensal).toFixed(2);
-    }
-  }
-
-  function setupSimulacao() {
-    const form = document.getElementById("form-simulacao");
-    form.addEventListener("submit", (e) => {
-      e.preventDefault();
-      const inicial = Number(document.getElementById("sim-inicial").value) || 0;
-      const mensal = Number(document.getElementById("sim-mensal").value) || 0;
-      const taxa = Number(document.getElementById("sim-taxa").value) || 0;
-      const meses = Number(document.getElementById("sim-meses").value) || 12;
-
-      const result = Dashboard.simular({ inicial, mensal, taxaMensalPct: taxa, meses });
-
-      const resultEl = document.getElementById("simulacao-result");
-      resultEl.style.display = "block";
-      resultEl.innerHTML = `
-        <div class="grid cols-3">
-          <div><div class="kpi-label">Valor final estimado</div><div class="kpi-value positive">${UI.formatBRL(result.saldoFinal)}</div></div>
-          <div><div class="kpi-label">Total aportado</div><div class="kpi-value">${UI.formatBRL(result.totalAportado)}</div></div>
-          <div><div class="kpi-label">Rendimento estimado</div><div class="kpi-value positive">${UI.formatBRL(result.totalJuros)}</div></div>
-        </div>
-      `;
-
-      document.getElementById("sim-chart-wrap").style.display = "block";
-      Dashboard.renderChartSimulacao(result.serie);
-    });
   }
 
   // ---------- SINCRONIZAÇÃO COM A PLUGGY (OPEN FINANCE) ----------
@@ -882,6 +870,8 @@
         await Store.refresh();
         renderReceitas();
         renderDespesas();
+        renderCartao();
+        renderInvestimentosPluggy();
         Dashboard.render(Store.get());
         const msg =
           res.importadas > 0
@@ -910,15 +900,9 @@
 
     receitasEditor = setupEditableForm("form-receitas", "receitas", renderReceitas);
     despesasEditor = setupEditableForm("form-despesas", "despesas", renderDespesas);
-    cartaoEditor = setupEditableForm("form-cartao", "cartao", () => {
-      renderCartao();
-      renderDespesas();
-    });
 
-    setupCartaoRecorrenteToggle();
     setupSyncPluggy();
     const poupancaConfig = setupPoupancaConfig();
-    setupSimulacao();
 
     try {
       await Store.refresh();
@@ -931,8 +915,8 @@
     renderCartao();
     renderQuitacao();
     renderPoupanca();
+    renderInvestimentosPluggy();
     poupancaConfig.preencherComConfigAtual();
-    preencherSimulacaoComPadroes();
     Dashboard.render(Store.get());
   }
 

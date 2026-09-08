@@ -63,7 +63,7 @@ Resources:
     Properties:
       CodeUri: FinancasFunction
       Handler: index.handler
-      Timeout: 25
+      Timeout: 28
       Environment:
         Variables:
           TABLE_NAME:

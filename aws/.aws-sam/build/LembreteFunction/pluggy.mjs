@@ -11,7 +11,7 @@
 // aws/lambda/ inteira pra cada função (CodeUri: lambda/ no template.yaml).
 // ==========================================================
 
-import { PutCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
+import { PutCommand, GetCommand, QueryCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
 
 const PLUGGY_API_URL = "https://api.pluggy.ai";
 
@@ -20,6 +20,11 @@ const PLUGGY_API_URL = "https://api.pluggy.ai";
 // (guardado em PLUGGY_SYNC), é seguro pedir uma janela generosa toda vez;
 // isso também pega correções que o banco faça em transações recentes.
 const JANELA_DIAS = 20;
+
+// Janela usada só pra montar a lista de compras por fatura (aba Cartão de
+// crédito) — mais larga que a de cima porque queremos mostrar também
+// faturas já fechadas dos últimos meses, não só a compra recém-chegada.
+const JANELA_DIAS_FATURAS = 120;
 
 // Categorias precisam bater exatamente com as usadas no front-end
 // (js/categories.js e os <select> de Despesas/Receitas no index.html).
@@ -116,6 +121,134 @@ async function listarTransacoes(apiKey, accountId, from, to) {
   return todas;
 }
 
+async function listarBills(apiKey, accountId) {
+  const json = await pluggyFetch(`${PLUGGY_API_URL}/bills?accountId=${encodeURIComponent(accountId)}`, apiKey);
+  return json.results || [];
+}
+
+async function listarInvestimentos(apiKey, itemId) {
+  let todos = [];
+  let page = 1;
+  // Poucos investimentos de pessoa física raramente passam de 1 página,
+  // mas seguimos totalPages por segurança.
+  while (true) {
+    const json = await pluggyFetch(
+      `${PLUGGY_API_URL}/investments?itemId=${encodeURIComponent(itemId)}&pageSize=500&page=${page}`,
+      apiKey
+    );
+    todos = todos.concat(json.results || []);
+    const totalPages = json.totalPages || 1;
+    if (page >= totalPages) break;
+    page++;
+  }
+  return todos;
+}
+
+// Apaga tudo de uma entidade "espelho" da Pluggy (faturas ou investimentos)
+// antes de regravar. Diferente de Despesas/Receitas (que são lançamentos
+// individuais e deduplicados por id), essas duas telas mostram o retorno
+// mais recente da Pluggy tal como ele é — então uma fatura que sai da
+// resposta (cartão cancelado) ou um investimento resgatado não pode ficar
+// órfão pra sempre na tabela.
+async function limparEntidade(ddb, TABLE_NAME, pk) {
+  const result = await ddb.send(
+    new QueryCommand({
+      TableName: TABLE_NAME,
+      KeyConditionExpression: "pk = :pk",
+      ExpressionAttributeValues: { ":pk": pk }
+    })
+  );
+  for (const item of result.Items || []) {
+    await ddb.send(new DeleteCommand({ TableName: TABLE_NAME, Key: { pk, sk: item.sk } }));
+  }
+}
+
+// Busca as faturas (bills) de uma conta de cartão e agrupa as transações
+// dela por fatura, usando o campo billId que a Pluggy devolve nas
+// transações já associadas a uma fatura. Grava uma "foto" de cada fatura
+// (total + lista de compras) — puramente informativo, não mexe em
+// Despesas/Receitas (essas continuam sendo lançadas como já eram).
+async function sincronizarFaturasDaConta(ddb, TABLE_NAME, apiKey, itemId, conta) {
+  const bills = await listarBills(apiKey, conta.id);
+  if (!bills.length) return 0;
+
+  const hoje = new Date();
+  const de = new Date(hoje);
+  de.setDate(de.getDate() - JANELA_DIAS_FATURAS);
+  const transacoes = await listarTransacoes(apiKey, conta.id, formatarData(de), formatarData(hoje));
+
+  const comprasPorFatura = new Map();
+  transacoes.forEach((tx) => {
+    if (!tx.billId) return;
+    // Só compras (valor positivo) — pagamentos da própria fatura/estornos
+    // não interessam aqui, é só "no que eu gastei nessa fatura".
+    if (!(Number(tx.amount) > 0)) return;
+    if (!comprasPorFatura.has(tx.billId)) comprasPorFatura.set(tx.billId, []);
+    comprasPorFatura.get(tx.billId).push({
+      id: tx.id,
+      data: String(tx.date).substring(0, 10),
+      descricao: String(tx.description || "Compra").trim().substring(0, 140),
+      valor: Number(tx.amount)
+    });
+  });
+
+  let gravadas = 0;
+  for (const bill of bills) {
+    const compras = (comprasPorFatura.get(bill.id) || []).sort((a, b) => (a.data < b.data ? 1 : -1));
+    await ddb.send(
+      new PutCommand({
+        TableName: TABLE_NAME,
+        Item: {
+          pk: "PLUGGY_FATURA",
+          sk: bill.id,
+          itemId,
+          contaId: conta.id,
+          contaNome: conta.name || conta.number || "Cartão",
+          dueDate: bill.dueDate ? String(bill.dueDate).substring(0, 10) : null,
+          billClosingDate: bill.billClosingDate ? String(bill.billClosingDate).substring(0, 10) : null,
+          totalAmount: Number(bill.totalAmount || 0),
+          minimumPaymentAmount: bill.minimumPaymentAmount != null ? Number(bill.minimumPaymentAmount) : null,
+          compras
+        }
+      })
+    );
+    gravadas++;
+  }
+  return gravadas;
+}
+
+// Busca os investimentos de um item (banco ou corretora conectados) e
+// grava uma "foto" de cada um — mesma lógica de sobrescrever tudo a cada
+// sincronização que as faturas, pelo mesmo motivo.
+async function sincronizarInvestimentosDoItem(ddb, TABLE_NAME, apiKey, itemId) {
+  const investimentos = await listarInvestimentos(apiKey, itemId);
+  let gravados = 0;
+  for (const inv of investimentos) {
+    // Já resgatado/transferido — não faz sentido continuar mostrando.
+    if (inv.status === "TOTAL_WITHDRAWAL") continue;
+    await ddb.send(
+      new PutCommand({
+        TableName: TABLE_NAME,
+        Item: {
+          pk: "PLUGGY_INVESTIMENTO",
+          sk: inv.id,
+          itemId,
+          nome: inv.name || "Investimento",
+          tipo: inv.type || null,
+          subtipo: inv.subtype || null,
+          valor: Number(inv.balance ?? inv.amount ?? 0),
+          valorInvestido: inv.amountOriginal != null ? Number(inv.amountOriginal) : null,
+          rentabilidadeAnual: inv.annualRate != null ? Number(inv.annualRate) : null,
+          rentabilidadeUltimos12Meses: inv.lastTwelveMonthsRate != null ? Number(inv.lastTwelveMonthsRate) : null,
+          dataAtualizacao: inv.date ? String(inv.date).substring(0, 10) : null
+        }
+      })
+    );
+    gravados++;
+  }
+  return gravados;
+}
+
 // Pede pra Pluggy ir atualizar o item direto na instituição financeira
 // (usado só no botão manual "Atualizar"). É melhor esforço: se falhar,
 // seguimos com os dados que já estão disponíveis em vez de travar o botão.
@@ -160,12 +293,23 @@ export async function syncAll({ ddb, TABLE_NAME, clientId, clientSecret, itemIds
 
   let importadas = 0;
   let ignoradas = 0;
+  let faturas = 0;
+  let investimentos = 0;
+
+  // Faturas e investimentos são um espelho do que a Pluggy retorna agora —
+  // limpamos tudo antes de regravar (ver comentário em limparEntidade).
+  await limparEntidade(ddb, TABLE_NAME, "PLUGGY_FATURA");
+  await limparEntidade(ddb, TABLE_NAME, "PLUGGY_INVESTIMENTO");
 
   for (const itemId of itemIds) {
     if (forceUpdate) await solicitarAtualizacaoItem(apiKey, itemId);
 
     const contas = await listarContas(apiKey, itemId);
     for (const conta of contas) {
+      if (conta.type === "CREDIT") {
+        faturas += await sincronizarFaturasDaConta(ddb, TABLE_NAME, apiKey, itemId, conta);
+      }
+
       const transacoes = await listarTransacoes(apiKey, conta.id, from, to);
 
       for (const tx of transacoes) {
@@ -220,7 +364,9 @@ export async function syncAll({ ddb, TABLE_NAME, clientId, clientSecret, itemIds
         importadas++;
       }
     }
+
+    investimentos += await sincronizarInvestimentosDoItem(ddb, TABLE_NAME, apiKey, itemId);
   }
 
-  return { importadas, ignoradas };
+  return { importadas, ignoradas, faturas, investimentos };
 }
