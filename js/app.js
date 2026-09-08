@@ -226,6 +226,7 @@
 
     setTabTotal("total-despesas-tab", rows.reduce((s, r) => s + Number(r.valor || 0), 0));
     renderDespesasMigracaoBanner(state.fixos);
+    renderContasFixasMes();
 
     UI.renderTable(
       document.querySelector("#table-despesas tbody"),
@@ -284,6 +285,123 @@
         }
       ]
     );
+  }
+
+  // ---------- CONTAS FIXAS DESTE MÊS (checklist de pagamento) ----------
+  // Puramente visual/local: guarda em localStorage quais contas recorrentes
+  // já foram marcadas como pagas neste mês, pra você conferir no dia do
+  // pagamento sem esquecer nenhuma. Não sincroniza com o backend nem entra
+  // em nenhum cálculo do dashboard — reseta sozinho todo mês porque a chave
+  // do localStorage inclui o mês atual.
+  function mesAtualKey() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  function chaveContaPaga() {
+    return `meu-financeiro-contas-pagas-${mesAtualKey()}`;
+  }
+
+  function contasPagasDoMes() {
+    try {
+      const raw = localStorage.getItem(chaveContaPaga());
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function isContaPaga(chave) {
+    return !!contasPagasDoMes()[chave];
+  }
+
+  function setContaPaga(chave, paga) {
+    const pagas = contasPagasDoMes();
+    if (paga) {
+      pagas[chave] = true;
+    } else {
+      delete pagas[chave];
+    }
+    try {
+      localStorage.setItem(chaveContaPaga(), JSON.stringify(pagas));
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function renderContasFixasMes() {
+    const el = document.getElementById("despesas-fixas-mes-lista");
+    if (!el) return;
+    const state = Store.get();
+
+    const recorrentes = state.despesas.filter(isRecorrente).map((d) => ({
+      chave: `despesas:${d.id}`,
+      descricao: d.descricao,
+      categoria: d.categoria,
+      valor: d.valor
+    }));
+    const cartaoRecorrente = state.cartao.filter(isRecorrente).map((c) => ({
+      chave: `cartao:${c.id}`,
+      descricao: c.descricao,
+      categoria: c.categoria,
+      valor: c.valor
+    }));
+    const fixosLegado = state.fixos
+      .filter((f) => String(f.ativo) !== "false")
+      .map((f) => ({
+        chave: `fixos:${f.id}`,
+        descricao: f.descricao,
+        categoria: f.categoria,
+        valor: f.valorMensal
+      }));
+    const quitacaoEmAberto = (state.quitacao || [])
+      .filter((q) => !isQuitada(q))
+      .map((q) => {
+        const qtd = Math.max(1, Number(q.qtdParcelas) || 1);
+        const pagas = parcelasPagasDe(q);
+        return {
+          chave: `quitacao:${q.id}`,
+          descricao: `${q.descricao} (parcela ${pagas + 1}/${qtd})`,
+          categoria: "Parcelamento antigo",
+          valor: Number(q.valorTotal || 0) / qtd
+        };
+      });
+
+    const itens = [...recorrentes, ...cartaoRecorrente, ...fixosLegado, ...quitacaoEmAberto].sort((a, b) =>
+      String(a.descricao).localeCompare(String(b.descricao), "pt-BR")
+    );
+
+    if (!itens.length) {
+      el.innerHTML = `<p class="empty-state" style="margin:0;">Nenhuma conta recorrente cadastrada ainda.</p>`;
+      return;
+    }
+
+    const pagasCount = itens.filter((i) => isContaPaga(i.chave)).length;
+
+    const linhas = itens
+      .map((item) => {
+        const paga = isContaPaga(item.chave);
+        return `
+          <label style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid #eee; ${paga ? "opacity:0.55;" : ""}">
+            <input type="checkbox" data-chave="${item.chave}" ${paga ? "checked" : ""} style="width:18px; height:18px; flex-shrink:0;" />
+            <span style="flex:1; ${paga ? "text-decoration:line-through;" : ""}">${item.descricao} <span class="tag">${item.categoria || "Outros"}</span></span>
+            <span style="${paga ? "text-decoration:line-through;" : ""}">${UI.formatBRL(item.valor)}</span>
+          </label>
+        `;
+      })
+      .join("");
+
+    el.innerHTML = `
+      <p style="font-size:13px; font-weight:600; margin:0 0 8px;">${pagasCount} de ${itens.length} pagas</p>
+      ${linhas}
+    `;
+
+    el.querySelectorAll("input[type=checkbox]").forEach((cb) => {
+      cb.addEventListener("change", () => {
+        setContaPaga(cb.dataset.chave, cb.checked);
+        renderContasFixasMes();
+      });
+    });
   }
 
   // ---------- CARTÃO DE CRÉDITO ----------
