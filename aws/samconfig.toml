@@ -8,7 +8,7 @@ confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
 disable_rollback = true
 image_repositories = []
-parameter_overrides = "WhatsAppRecipientNumber=\"556182600220\""
+parameter_overrides = "WhatsAppRecipientNumber=\"556182600220\" PluggyItemIds=\"47576876-c6de-4796-867a-df28e3f27980,6cb833c8-5b70-4bd3-9c84-8650edbe5d02\""
 
 [default.global.parameters]
 region = "us-east-1"

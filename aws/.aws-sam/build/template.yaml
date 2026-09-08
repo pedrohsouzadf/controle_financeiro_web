@@ -22,6 +22,19 @@ Parameters:
     Description: "Apikey que o CallMeBot te enviou por WhatsApp depois de voc\xEA\
       \ mandar a mensagem de ativa\xE7\xE3o para o n\xFAmero deles. Veja o Passo 6\
       \ do README.\n"
+  PluggyClientId:
+    Type: String
+    NoEcho: true
+    Description: "Client ID da sua aplica\xE7\xE3o no Dashboard da Pluggy (dashboard.pluggy.ai).\
+      \ Veja o Passo 7 do README.\n"
+  PluggyClientSecret:
+    Type: String
+    NoEcho: true
+    Description: "Client Secret da sua aplica\xE7\xE3o no Dashboard da Pluggy.\n"
+  PluggyItemIds:
+    Type: String
+    Description: "Um ou mais itemId das conex\xF5es \"Meu Pluggy\" vinculadas \xE0\
+      \ sua aplica\xE7\xE3o (uma por banco conectado), separados por v\xEDrgula.\n"
 Globals:
   Function:
     Timeout: 10
@@ -50,12 +63,19 @@ Resources:
     Properties:
       CodeUri: FinancasFunction
       Handler: index.handler
+      Timeout: 25
       Environment:
         Variables:
           TABLE_NAME:
             Ref: FinancasTable
           API_KEY:
             Ref: ApiKeyValue
+          PLUGGY_CLIENT_ID:
+            Ref: PluggyClientId
+          PLUGGY_CLIENT_SECRET:
+            Ref: PluggyClientSecret
+          PLUGGY_ITEM_IDS:
+            Ref: PluggyItemIds
       Policies:
       - DynamoDBCrudPolicy:
           TableName:
@@ -99,6 +119,36 @@ Resources:
             Enabled: true
     Metadata:
       SamResourceId: LembreteFunction
+  PluggySyncFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: PluggySyncFunction
+      Handler: pluggy-sync.handler
+      Timeout: 60
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: FinancasTable
+          PLUGGY_CLIENT_ID:
+            Ref: PluggyClientId
+          PLUGGY_CLIENT_SECRET:
+            Ref: PluggyClientSecret
+          PLUGGY_ITEM_IDS:
+            Ref: PluggyItemIds
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: FinancasTable
+      Events:
+        SincronizacaoDiaria:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 9 * * ? *)
+            Description: "Sincroniza\xE7\xE3o di\xE1ria com a Pluggy \xE0s 6h (hor\xE1\
+              rio de Bras\xEDlia)"
+            Enabled: true
+    Metadata:
+      SamResourceId: PluggySyncFunction
   FinancasHttpApi:
     Type: AWS::Serverless::HttpApi
     Properties:

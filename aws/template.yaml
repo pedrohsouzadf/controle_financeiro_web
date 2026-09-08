@@ -27,6 +27,25 @@ Parameters:
       Apikey que o CallMeBot te enviou por WhatsApp depois de você mandar a
       mensagem de ativação para o número deles. Veja o Passo 6 do README.
 
+  PluggyClientId:
+    Type: String
+    NoEcho: true
+    Description: >
+      Client ID da sua aplicação no Dashboard da Pluggy (dashboard.pluggy.ai).
+      Veja o Passo 7 do README.
+
+  PluggyClientSecret:
+    Type: String
+    NoEcho: true
+    Description: >
+      Client Secret da sua aplicação no Dashboard da Pluggy.
+
+  PluggyItemIds:
+    Type: String
+    Description: >
+      Um ou mais itemId das conexões "Meu Pluggy" vinculadas à sua
+      aplicação (uma por banco conectado), separados por vírgula.
+
 Globals:
   Function:
     Timeout: 10
@@ -56,10 +75,17 @@ Resources:
     Properties:
       CodeUri: lambda/
       Handler: index.handler
+      # O botão "Atualizar" (ação syncPluggy) chama a API da Pluggy antes de
+      # responder — folga em relação ao padrão de 10s, mas ainda dentro do
+      # limite de ~30s do API Gateway pra uma resposta síncrona.
+      Timeout: 25
       Environment:
         Variables:
           TABLE_NAME: !Ref FinancasTable
           API_KEY: !Ref ApiKeyValue
+          PLUGGY_CLIENT_ID: !Ref PluggyClientId
+          PLUGGY_CLIENT_SECRET: !Ref PluggyClientSecret
+          PLUGGY_ITEM_IDS: !Ref PluggyItemIds
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref FinancasTable
@@ -97,6 +123,35 @@ Resources:
           Properties:
             Schedule: "cron(0 23 * * ? *)"
             Description: "Lembrete diário no WhatsApp às 20h (horário de Brasília)"
+            Enabled: true
+
+  # Sincroniza automaticamente, 1x por dia, as transações das contas
+  # conectadas na Pluggy (Open Finance via Meu Pluggy). Roda de manhã cedo,
+  # antes do horário em que o usuário costuma abrir o app. O botão
+  # "Atualizar" na tela de Despesas chama a mesma lógica sob demanda, via
+  # a ação "syncPluggy" da FinancasFunction — essa Lambda aqui é só o
+  # agendamento automático.
+  PluggySyncFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/
+      Handler: pluggy-sync.handler
+      Timeout: 60
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref FinancasTable
+          PLUGGY_CLIENT_ID: !Ref PluggyClientId
+          PLUGGY_CLIENT_SECRET: !Ref PluggyClientSecret
+          PLUGGY_ITEM_IDS: !Ref PluggyItemIds
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref FinancasTable
+      Events:
+        SincronizacaoDiaria:
+          Type: Schedule
+          Properties:
+            Schedule: "cron(0 9 * * ? *)"
+            Description: "Sincronização diária com a Pluggy às 6h (horário de Brasília)"
             Enabled: true
 
   FinancasHttpApi:
