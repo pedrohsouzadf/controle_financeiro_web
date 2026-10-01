@@ -1,5 +1,7 @@
 // ==========================================================
-// App principal: navegação entre abas, formulários e tabelas
+// App principal — página única: Resumo, Orçamento por categoria,
+// Gastos (dinheiro ou cartão), Contas fixas, Receita, Quitação de
+// parcelas antigas e Poupança.
 // ==========================================================
 
 (function () {
@@ -7,20 +9,6 @@
     const banner = document.getElementById("config-banner");
     if (!Api.isConfigured()) banner.classList.add("show");
     else banner.classList.remove("show");
-  }
-
-  function switchView(viewName) {
-    document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
-    document.getElementById(`view-${viewName}`).classList.add("active");
-    document.querySelectorAll("nav.tabs button").forEach((b) => b.classList.remove("active"));
-    document.querySelector(`nav.tabs button[data-view="${viewName}"]`).classList.add("active");
-    if (viewName === "dashboard") Dashboard.render(Store.get());
-  }
-
-  function setupNav() {
-    document.querySelectorAll("nav.tabs button").forEach((btn) => {
-      btn.addEventListener("click", () => switchView(btn.dataset.view));
-    });
   }
 
   // Referências preenchidas em init() — usadas pelos botões "Editar" das tabelas.
@@ -31,83 +19,143 @@
     if (el) el.textContent = UI.formatBRL(value);
   }
 
-  // ---------- FILTRO POR MÊS ----------
-  // Estado do filtro selecionado em cada aba ("todos" ou "YYYY-MM").
-  const filtroMes = { receitas: "todos", despesas: "todos", fixos: "todos", cartao: "todos", poupanca: "todos" };
-  const NOMES_MES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+  // ---------- MÊS ATUAL ----------
+  function monthKey(dateStr) {
+    if (!dateStr) return null;
+    const s = String(dateStr).substring(0, 7); // YYYY-MM
+    return /^\d{4}-\d{2}$/.test(s) ? s : null;
+  }
 
-  function mesesDisponiveis(rows, field) {
-    const meses = new Set();
-    rows.forEach((r) => {
-      const v = r[field];
-      if (v && /^\d{4}-\d{2}/.test(String(v))) meses.add(String(v).substring(0, 7));
+  function currentMonthKey() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  function isRecorrente(item) {
+    return item.recorrente === true || item.recorrente === "true" || item.recorrente === "on";
+  }
+
+  // Um lançamento recorrente conta em todo mês a partir da data em que foi
+  // cadastrado (igual salário, aluguel, assinatura). Um lançamento avulso
+  // conta só no mês exato da data.
+  function contaNoMes(item, key) {
+    const m = monthKey(item.data);
+    if (!m) return false;
+    return isRecorrente(item) ? m <= key : m === key;
+  }
+
+  // ---------- CÁLCULOS CENTRAIS (usados pelo Resumo e pelo Orçamento) ----------
+  function receitaDoMes(state, key) {
+    return state.receitas.filter((r) => contaNoMes(r, key)).reduce((s, r) => s + Number(r.valor || 0), 0);
+  }
+
+  // Tudo que é compromisso fixo do mês: despesas marcadas "Recorrente",
+  // contas fixas antigas (pk FIXOS, ainda não migradas) e a parcela mensal
+  // de parcelamentos antigos (Quitação) ainda em aberto.
+  function gastosFixosDoMes(state, key) {
+    const despesasRecorrentes = state.despesas.filter((d) => isRecorrente(d) && contaNoMes(d, key));
+    const fixosLegado = state.fixos.filter((f) => String(f.ativo) !== "false");
+    const quitacaoEmAberto = (state.quitacao || []).filter((q) => !isQuitada(q));
+
+    const totalRecorrentes = despesasRecorrentes.reduce((s, d) => s + Number(d.valor || 0), 0);
+    const totalFixosLegado = fixosLegado.reduce((s, f) => s + Number(f.valorMensal || 0), 0);
+    const totalQuitacao = quitacaoEmAberto.reduce((s, q) => {
+      const qtd = Math.max(1, Number(q.qtdParcelas) || 1);
+      return s + Number(q.valorTotal || 0) / qtd;
+    }, 0);
+
+    return {
+      total: totalRecorrentes + totalFixosLegado + totalQuitacao,
+      despesasRecorrentes,
+      fixosLegado,
+      quitacaoEmAberto
+    };
+  }
+
+  // Despesas avulsas (não recorrentes) do mês atual — são o que conta contra
+  // o orçamento por categoria. As recorrentes já foram contabilizadas como
+  // Gasto Fixo acima, então não entram de novo aqui (evita contar 2x).
+  function despesasVariaveisDoMes(state, key) {
+    return state.despesas.filter((d) => !isRecorrente(d) && monthKey(d.data) === key);
+  }
+
+  function gastoPorCategoria(despesas) {
+    const totais = {};
+    despesas.forEach((d) => {
+      const cat = d.categoria || "Outros";
+      totais[cat] = (totais[cat] || 0) + Number(d.valor || 0);
     });
-    return [...meses].sort().reverse();
+    return totais;
   }
 
-  function formatarMesLabel(mesKey) {
-    const [y, m] = mesKey.split("-");
-    return `${NOMES_MES[Number(m) - 1]}/${y}`;
+  function isCartao(d) {
+    return d.formaPagamento === "cartao";
   }
 
-  // Popula o <select> de filtro de mês de uma aba com os meses realmente
-  // presentes nos dados, preservando a seleção atual quando possível.
-  function popularFiltroMes(selectId, rows, field, filtroKey, onChange) {
-    const select = document.getElementById(selectId);
-    if (!select) return;
-    const meses = mesesDisponiveis(rows, field);
-    const atual = filtroMes[filtroKey];
-    const valorSelecionado = meses.includes(atual) ? atual : "todos";
-    select.innerHTML =
-      `<option value="todos">Todos os meses</option>` +
-      meses.map((m) => `<option value="${m}">${formatarMesLabel(m)}</option>`).join("");
-    select.value = valorSelecionado;
-    filtroMes[filtroKey] = valorSelecionado;
-    select.onchange = () => {
-      filtroMes[filtroKey] = select.value;
-      onChange();
-    };
+  // ---------- RESUMO DO MÊS ----------
+  function renderResumo() {
+    const state = Store.get();
+    const key = currentMonthKey();
+    const receita = receitaDoMes(state, key);
+    const fixos = gastosFixosDoMes(state, key).total;
+    const orcamento = Orcamento.calcular(receita, fixos);
+    const livre = receita - fixos - orcamento.poupancaSugerida;
+
+    setTabTotal("resumo-receita", receita);
+    setTabTotal("resumo-fixos", fixos);
+    setTabTotal("resumo-poupanca-sugerida", orcamento.poupancaSugerida);
+    const livreEl = document.getElementById("resumo-livre");
+    if (livreEl) {
+      livreEl.textContent = UI.formatBRL(livre);
+      livreEl.className = "kpi-value " + (livre >= 0 ? "positive" : "negative");
+    }
+
+    const metaTexto = document.getElementById("poupanca-meta-sugerida-texto");
+    if (metaTexto) metaTexto.textContent = UI.formatBRL(orcamento.poupancaSugerida);
+
+    return { state, key, receita, fixos, orcamento };
   }
 
-  function filtrarPorMes(rows, field, filtroKey) {
-    const mes = filtroMes[filtroKey];
-    if (mes === "todos") return rows;
-    return rows.filter((r) => String(r[field] || "").startsWith(mes));
+  // ---------- ORÇAMENTO POR CATEGORIA ----------
+  function renderOrcamento() {
+    const state = Store.get();
+    const key = currentMonthKey();
+    const receita = receitaDoMes(state, key);
+    const fixos = gastosFixosDoMes(state, key).total;
+    const orcamento = Orcamento.calcular(receita, fixos);
+    const gastoPorCat = gastoPorCategoria(despesasVariaveisDoMes(state, key));
+
+    const tbody = document.querySelector("#table-orcamento tbody");
+    if (!tbody) return;
+
+    if (receita <= 0) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Cadastre uma receita pra ver quanto você pode gastar em cada categoria.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = Orcamento.ORDEM_CATEGORIAS.map((cat) => {
+      const sugerido = orcamento.porCategoria[cat] || 0;
+      const gasto = gastoPorCat[cat] || 0;
+      const restante = sugerido - gasto;
+      const pct = sugerido > 0 ? Math.min(100, (gasto / sugerido) * 100) : gasto > 0 ? 100 : 0;
+      const estourou = sugerido > 0 && gasto > sugerido;
+      const classeBarra = estourou ? "over" : pct >= 80 ? "warn" : "";
+      return `
+        <tr>
+          <td>${cat}</td>
+          <td>${UI.formatBRL(sugerido)}</td>
+          <td>${UI.formatBRL(gasto)}</td>
+          <td class="${restante < 0 ? "value-out" : ""}">${UI.formatBRL(restante)}</td>
+          <td>
+            <div class="progress-bar"><div class="progress-bar-fill ${classeBarra}" style="width:${pct}%;"></div></div>
+          </td>
+        </tr>`;
+    }).join("");
   }
 
-  // ---------- FILTRO POR GRUPO (Necessidades/Desejos/Investimentos/Extraordinários) ----------
-  // Estado do filtro de grupo selecionado em cada aba ("todos" ou a chave do
-  // grupo em Categories.CATEGORY_GROUPS).
-  const filtroGrupo = { despesas: "todos", fixos: "todos", cartao: "todos" };
-
-  // As opções são fixas (vêm de Categories.CATEGORY_GROUPS), então só
-  // preenchemos o <select> uma vez — não precisa recriar a cada render.
-  function popularFiltroGrupo(selectId, filtroKey, onChange) {
-    const select = document.getElementById(selectId);
-    if (!select || select.dataset.populated) return;
-    select.dataset.populated = "true";
-    const opcoes = Object.entries(Categories.CATEGORY_GROUPS)
-      .map(([key, g]) => `<option value="${key}">${g.label}</option>`)
-      .join("");
-    select.innerHTML = `<option value="todos">Todos os grupos</option>${opcoes}`;
-    select.value = filtroGrupo[filtroKey];
-    select.onchange = () => {
-      filtroGrupo[filtroKey] = select.value;
-      onChange();
-    };
-  }
-
-  function filtrarPorGrupo(rows, filtroKey) {
-    const grupo = filtroGrupo[filtroKey];
-    if (grupo === "todos") return rows;
-    return rows.filter((r) => Categories.grupoDaCategoria(r.categoria) === grupo);
-  }
-
-  // ---------- RECEITAS ----------
+  // ---------- RECEITA ----------
   function renderReceitas() {
-    const all = UI.sortByDateDesc(Store.get().receitas);
-    popularFiltroMes("filtro-mes-receitas", all, "data", "receitas", renderReceitas);
-    const rows = filtrarPorMes(all, "data", "receitas");
+    const rows = UI.sortByDateDesc(Store.get().receitas);
     setTabTotal("total-receitas-tab", rows.reduce((s, r) => s + Number(r.valor || 0), 0));
     UI.renderTable(
       document.querySelector("#table-receitas tbody"),
@@ -117,7 +165,7 @@
         { field: "descricao" },
         { render: (r) => `<span class="tag">${r.categoria}</span>` },
         { render: (r) => `<span class="value-in">${UI.formatBRL(r.valor)}</span>` },
-        { render: (r) => tagsOrigemLancamento(r) }
+        { render: (r) => (isRecorrente(r) ? `<span class="tag" style="background:#e6f9ec;color:#1a7f3c;">Recorrente</span>` : "") }
       ],
       [
         { label: "Editar", className: "btn secondary", onClick: (row) => receitasEditor.startEdit(row) },
@@ -128,8 +176,7 @@
             if (!confirm("Excluir esta receita?")) return;
             try {
               await Store.deleteItem("receitas", row.id);
-              renderReceitas();
-              Dashboard.render(Store.get());
+              renderTudo();
               UI.toast("Receita excluída");
             } catch (e) {
               UI.toast(e.message, true);
@@ -140,14 +187,57 @@
     );
   }
 
-  // ---------- DESPESAS ----------
-  // Aba única para qualquer gasto fora do cartão de crédito. Junta as
-  // despesas cadastradas aqui com três coisas que "moram" em outros lugares
-  // mas também são gastos: contas fixas antigas ainda não migradas (extinta
-  // aba Gastos Fixos), assinaturas recorrentes do cartão, e as parcelas de
-  // parcelamentos antigos ainda em aberto (Quitação). "Fixo" e "variável"
-  // não existem mais como conceitos separados — o que importa é só se o
-  // gasto é "Recorrente" (continua todo mês) ou não.
+  // ---------- GASTOS (dinheiro ou cartão, dia a dia) ----------
+  function renderDespesas() {
+    const state = Store.get();
+    const key = currentMonthKey();
+    const rows = UI.sortByDateDesc(state.despesas.filter((d) => contaNoMes(d, key)));
+
+    const totalMes = rows.reduce((s, d) => s + Number(d.valor || 0), 0);
+    const totalCartao = rows.filter(isCartao).reduce((s, d) => s + Number(d.valor || 0), 0);
+    setTabTotal("total-despesas-tab", totalMes);
+    setTabTotal("total-cartao-mes", totalCartao);
+
+    UI.renderTable(
+      document.querySelector("#table-despesas tbody"),
+      rows,
+      [
+        { render: (r) => UI.formatDate(r.data) },
+        { field: "descricao" },
+        { render: (r) => `<span class="tag">${r.categoria || "Outros"}</span>` },
+        {
+          render: (r) =>
+            isCartao(r)
+              ? `<span class="tag" style="background:#fff2e0;color:#a35b00;">💳 Cartão</span>`
+              : `<span class="tag" style="background:#e6f0fd;color:#0050b3;">💵 Outro</span>`
+        },
+        {
+          render: (r) => {
+            const valor = `<span class="value-out">${UI.formatBRL(r.valor)}</span>`;
+            return isRecorrente(r) ? `${valor} <span class="tag" style="background:#e6f9ec;color:#1a7f3c;">Recorrente</span>` : valor;
+          }
+        }
+      ],
+      [
+        { label: "Editar", className: "btn secondary", onClick: (row) => despesasEditor.startEdit(row) },
+        {
+          label: "Excluir",
+          className: "btn danger",
+          onClick: async (row) => {
+            if (!confirm("Excluir este gasto?")) return;
+            try {
+              await Store.deleteItem("despesas", row.id);
+              renderTudo();
+              UI.toast("Gasto excluído");
+            } catch (e) {
+              UI.toast(e.message, true);
+            }
+          }
+        }
+      ]
+    );
+  }
+
   function renderDespesasMigracaoBanner(fixos) {
     const el = document.getElementById("despesas-migracao-fixos");
     if (!el) return;
@@ -161,7 +251,7 @@
     el.style.cssText =
       "display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; background:#e6f0fd; color:#0050b3; padding:10px 14px; border-radius:10px; font-size:13px; margin-bottom:16px;";
     el.innerHTML = `
-      <span>💡 Você tem ${pendentes.length} ${pendentes.length === 1 ? "conta fixa antiga" : "contas fixas antigas"} da extinta aba "Gastos Fixos". Elas já aparecem na lista abaixo, mas migre pra essa aba nova pra poder editar normalmente.</span>
+      <span>💡 Você tem ${pendentes.length} ${pendentes.length === 1 ? "conta fixa antiga" : "contas fixas antigas"} de uma versão anterior do app. Elas já contam no total de Gastos Fixos, mas migre pra "Gastos do mês" (marcando "Recorrente") pra poder editar normalmente.</span>
       <button type="button" class="btn secondary" id="btn-migrar-fixos">Migrar gastos fixos antigos</button>
     `;
     document.getElementById("btn-migrar-fixos").addEventListener("click", migrarFixosAntigos);
@@ -170,7 +260,7 @@
   async function migrarFixosAntigos() {
     const pendentes = Store.get().fixos.filter((f) => String(f.ativo) !== "false");
     if (!pendentes.length) return;
-    if (!confirm(`Migrar ${pendentes.length} conta(s) fixa(s) antiga(s) pra essa aba nova? Cada uma vira uma despesa recorrente, e a versão antiga é removida.`)) return;
+    if (!confirm(`Migrar ${pendentes.length} conta(s) fixa(s) antiga(s) pra "Gastos do mês"? Cada uma vira um gasto recorrente, e a versão antiga é removida.`)) return;
     try {
       for (const f of pendentes) {
         await Store.addItem("despesas", {
@@ -178,123 +268,25 @@
           descricao: f.descricao,
           categoria: f.categoria || "Outros",
           valor: f.valorMensal,
+          formaPagamento: "dinheiro",
           recorrente: "true"
         });
         await Store.deleteItem("fixos", f.id);
       }
-      renderDespesas();
-      Dashboard.render(Store.get());
+      renderTudo();
       UI.toast("Contas fixas migradas com sucesso");
     } catch (e) {
       UI.toast(e.message, true);
     }
   }
 
-  function renderDespesas() {
-    const state = Store.get();
-    const despesasTodas = UI.sortByDateDesc(state.despesas).map((d) => ({ ...d, origem: "despesas" }));
-    const cartaoRecorrentesTodos = state.cartao.filter(isRecorrente).map((c) => ({ ...c, origem: "cartao", valor: c.valor }));
-
-    // Sem data específica — compromissos contínuos que sempre aparecem,
-    // independente do filtro de mês escolhido.
-    const boletosLegado = state.fixos
-      .filter((f) => String(f.ativo) !== "false")
-      .map((f) => ({ ...f, origem: "fixos", categoria: f.categoria, valor: f.valorMensal, recorrente: "true" }));
-    const quitacaoEmAberto = (state.quitacao || [])
-      .filter((q) => !isQuitada(q))
-      .map((q) => {
-        const qtd = Math.max(1, Number(q.qtdParcelas) || 1);
-        const pagas = parcelasPagasDe(q);
-        return {
-          ...q,
-          origem: "quitacao",
-          descricao: `${q.descricao} (parcela ${pagas + 1}/${qtd})`,
-          categoria: "Parcelamento antigo",
-          valor: Number(q.valorTotal || 0) / qtd,
-          recorrente: "true"
-        };
-      });
-
-    const comData = [...despesasTodas, ...cartaoRecorrentesTodos];
-    popularFiltroMes("filtro-mes-despesas", comData, "data", "despesas", renderDespesas);
-    popularFiltroGrupo("filtro-grupo-despesas", "despesas", renderDespesas);
-
-    const rows = [
-      ...filtrarPorGrupo(filtrarPorMes(comData, "data", "despesas"), "despesas"),
-      ...filtrarPorGrupo([...boletosLegado, ...quitacaoEmAberto], "despesas")
-    ];
-
-    setTabTotal("total-despesas-tab", rows.reduce((s, r) => s + Number(r.valor || 0), 0));
-    renderDespesasMigracaoBanner(state.fixos);
-    renderContasFixasMes();
-
-    UI.renderTable(
-      document.querySelector("#table-despesas tbody"),
-      rows,
-      [
-        { render: (r) => (r.data ? UI.formatDate(r.data) : "—") },
-        { field: "descricao" },
-        { render: (r) => `<span class="tag">${r.categoria || "Outros"}</span>` },
-        { render: (r) => `<span class="value-out">${UI.formatBRL(r.valor)}</span>` },
-        { render: (r) => tagsOrigemLancamento(r) }
-      ],
-      [
-        {
-          label: "Editar",
-          className: "btn secondary",
-          onClick: (row) => {
-            if (row.origem === "cartao") {
-              UI.toast("Item antigo do cartão (cadastro manual) — não dá mais pra editar, só excluir", true);
-              return;
-            }
-            if (row.origem === "quitacao") {
-              UI.toast("Este item vem da Quitação de parcelas antigas — edite por lá", true);
-              switchView("cartao");
-              return;
-            }
-            if (row.origem === "fixos") {
-              UI.toast('Item antigo — clique em "Migrar gastos fixos antigos" acima pra poder editar', true);
-              return;
-            }
-            despesasEditor.startEdit(row);
-          }
-        },
-        {
-          label: "Excluir",
-          className: "btn danger",
-          onClick: async (row) => {
-            const msg =
-              row.origem === "cartao"
-                ? "Este item vem da aba Cartão de crédito. Excluir?"
-                : row.origem === "quitacao"
-                ? "Este parcelamento vem da Quitação de parcelas antigas. Excluir o parcelamento inteiro?"
-                : "Excluir esta despesa?";
-            if (!confirm(msg)) return;
-            try {
-              await Store.deleteItem(row.origem, row.id);
-              renderDespesas();
-              if (row.origem === "cartao") renderCartao();
-              if (row.origem === "quitacao") renderQuitacao();
-              Dashboard.render(Store.get());
-              UI.toast("Despesa excluída");
-            } catch (e) {
-              UI.toast(e.message, true);
-            }
-          }
-        }
-      ]
-    );
-  }
-
   // ---------- CONTAS FIXAS DESTE MÊS (checklist de pagamento) ----------
   // Puramente visual/local: guarda em localStorage quais contas recorrentes
-  // já foram marcadas como pagas neste mês, pra você conferir no dia do
-  // pagamento sem esquecer nenhuma. Não sincroniza com o backend nem entra
-  // em nenhum cálculo do dashboard — reseta sozinho todo mês porque a chave
-  // do localStorage inclui o mês atual.
+  // já foram marcadas como pagas neste mês. Não sincroniza com o backend
+  // nem entra em nenhum cálculo — reseta sozinho todo mês porque a chave do
+  // localStorage inclui o mês atual.
   function mesAtualKey() {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    return currentMonthKey();
   }
 
   function chaveContaPaga() {
@@ -332,30 +324,13 @@
     const el = document.getElementById("despesas-fixas-mes-lista");
     if (!el) return;
     const state = Store.get();
+    const key = currentMonthKey();
+    const { despesasRecorrentes, fixosLegado, quitacaoEmAberto } = gastosFixosDoMes(state, key);
 
-    const recorrentes = state.despesas.filter(isRecorrente).map((d) => ({
-      chave: `despesas:${d.id}`,
-      descricao: d.descricao,
-      categoria: d.categoria,
-      valor: d.valor
-    }));
-    const cartaoRecorrente = state.cartao.filter(isRecorrente).map((c) => ({
-      chave: `cartao:${c.id}`,
-      descricao: c.descricao,
-      categoria: c.categoria,
-      valor: c.valor
-    }));
-    const fixosLegado = state.fixos
-      .filter((f) => String(f.ativo) !== "false")
-      .map((f) => ({
-        chave: `fixos:${f.id}`,
-        descricao: f.descricao,
-        categoria: f.categoria,
-        valor: f.valorMensal
-      }));
-    const quitacaoEmAberto = (state.quitacao || [])
-      .filter((q) => !isQuitada(q))
-      .map((q) => {
+    const itens = [
+      ...despesasRecorrentes.map((d) => ({ chave: `despesas:${d.id}`, descricao: d.descricao, categoria: d.categoria, valor: d.valor })),
+      ...fixosLegado.map((f) => ({ chave: `fixos:${f.id}`, descricao: f.descricao, categoria: f.categoria, valor: f.valorMensal })),
+      ...quitacaoEmAberto.map((q) => {
         const qtd = Math.max(1, Number(q.qtdParcelas) || 1);
         const pagas = parcelasPagasDe(q);
         return {
@@ -364,14 +339,11 @@
           categoria: "Parcelamento antigo",
           valor: Number(q.valorTotal || 0) / qtd
         };
-      });
-
-    const itens = [...recorrentes, ...cartaoRecorrente, ...fixosLegado, ...quitacaoEmAberto].sort((a, b) =>
-      String(a.descricao).localeCompare(String(b.descricao), "pt-BR")
-    );
+      })
+    ].sort((a, b) => String(a.descricao).localeCompare(String(b.descricao), "pt-BR"));
 
     if (!itens.length) {
-      el.innerHTML = `<p class="empty-state" style="margin:0;">Nenhuma conta recorrente cadastrada ainda.</p>`;
+      el.innerHTML = `<p class="empty-state" style="margin:0;">Nenhuma conta fixa cadastrada ainda. Marque "Recorrente" ao lançar um gasto pra ela aparecer aqui todo mês.</p>`;
       return;
     }
 
@@ -401,67 +373,6 @@
         renderContasFixasMes();
       });
     });
-  }
-
-  // ---------- CARTÃO DE CRÉDITO (dados do Pluggy / Open Finance) ----------
-  // Só leitura: mostra o total de cada fatura trazida pela sincronização
-  // com a Pluggy e as compras que a compõem. Não existe mais cadastro
-  // manual aqui — um cartão sem conexão deve ser lançado na aba Despesas.
-  function renderCartao() {
-    const faturas = (Store.get().pluggyFaturas || [])
-      .slice()
-      .sort((a, b) => String(b.dueDate || "").localeCompare(String(a.dueDate || "")));
-
-    const total = faturas.reduce((s, f) => s + Number(f.totalAmount || 0), 0);
-    setTabTotal("total-cartao-tab", total);
-
-    const vazioEl = document.getElementById("cartao-pluggy-vazio");
-    const listaEl = document.getElementById("cartao-pluggy-faturas");
-    if (!listaEl) return;
-
-    if (!faturas.length) {
-      if (vazioEl) vazioEl.style.display = "block";
-      listaEl.innerHTML = "";
-      return;
-    }
-    if (vazioEl) vazioEl.style.display = "none";
-
-    listaEl.innerHTML = faturas
-      .map((f) => {
-        const compras = f.compras || [];
-        const linhasCompras = compras.length
-          ? compras
-              .map(
-                (c) => `
-                  <tr>
-                    <td>${UI.formatDate(c.data)}</td>
-                    <td>${c.descricao}</td>
-                    <td><span class="value-out">${UI.formatBRL(c.valor)}</span></td>
-                  </tr>`
-              )
-              .join("")
-          : `<tr><td colspan="3" class="empty-state">Nenhuma compra encontrada nessa fatura</td></tr>`;
-
-        return `
-          <div class="card" style="margin-bottom:16px;">
-            <div class="section-title-row" style="margin-bottom:8px;">
-              <div>
-                <h3 style="margin:0;">${f.contaNome || "Cartão"}</h3>
-                <p style="font-size:12px; color:var(--text-muted); margin:2px 0 0;">
-                  ${f.dueDate ? `Vencimento: ${UI.formatDate(f.dueDate)}` : "Fatura em aberto"}
-                  ${f.billClosingDate ? ` · Fechada em ${UI.formatDate(f.billClosingDate)}` : ""}
-                </p>
-              </div>
-              <div class="kpi-value" style="font-size:18px;">${UI.formatBRL(f.totalAmount)}</div>
-            </div>
-            <table>
-              <thead><tr><th>Data</th><th>Descrição</th><th>Valor</th></tr></thead>
-              <tbody>${linhasCompras}</tbody>
-            </table>
-          </div>
-        `;
-      })
-      .join("");
   }
 
   // ---------- QUITAÇÃO DE PARCELAS ANTIGAS ----------
@@ -539,9 +450,7 @@
             if (!confirm("Excluir este parcelamento?")) return;
             try {
               await Store.deleteItem("quitacao", row.id);
-              renderQuitacao();
-              renderDespesas();
-              Dashboard.render(Store.get());
+              renderTudo();
               UI.toast("Parcelamento excluído");
             } catch (e) {
               UI.toast(e.message, true);
@@ -559,11 +468,7 @@
       const novo = Math.min(Math.max(parcelasPagasDe(row) + delta, 0), qtd);
       try {
         await Store.updateItem("quitacao", row.id, { parcelasPagas: String(novo) });
-        renderQuitacao();
-        // A parcela paga sai (ou entra) na lista de Despesas e nas somas
-        // do dashboard, então os dois precisam ser atualizados também.
-        renderDespesas();
-        Dashboard.render(Store.get());
+        renderTudo();
         UI.toast(novo >= qtd ? "Parcelamento quitado! 🎉" : delta > 0 ? "Parcela marcada como paga" : "Parcela desmarcada");
       } catch (e) {
         UI.toast(e.message, true);
@@ -582,24 +487,15 @@
   function totalGuardadoAtual() {
     const state = Store.get();
     const saldoInicial = Number(state.config.saldoInicial || 0);
-    const depositos = state.poupanca
-      .filter((p) => p.tipo === "deposito")
-      .reduce((s, p) => s + Number(p.valor || 0), 0);
-    const retiradas = state.poupanca
-      .filter((p) => p.tipo === "retirada")
-      .reduce((s, p) => s + Number(p.valor || 0), 0);
+    const depositos = state.poupanca.filter((p) => p.tipo === "deposito").reduce((s, p) => s + Number(p.valor || 0), 0);
+    const retiradas = state.poupanca.filter((p) => p.tipo === "retirada").reduce((s, p) => s + Number(p.valor || 0), 0);
     return saldoInicial + depositos - retiradas;
   }
 
   function renderPoupanca() {
-    const all = UI.sortByDateDesc(Store.get().poupanca);
-    popularFiltroMes("filtro-mes-poupanca", all, "data", "poupanca", renderPoupanca);
-    const rows = filtrarPorMes(all, "data", "poupanca");
+    const rows = UI.sortByDateDesc(Store.get().poupanca);
     const depositos = rows.filter((p) => p.tipo === "deposito").reduce((s, p) => s + Number(p.valor || 0), 0);
     const retiradas = rows.filter((p) => p.tipo === "retirada").reduce((s, p) => s + Number(p.valor || 0), 0);
-    // "Total guardado" continua sendo o saldo acumulado real (não filtrado por
-    // mês) — o filtro aqui só afeta a lista de movimentações e os totais de
-    // depósitos/retiradas exibidos.
     document.getElementById("poupanca-total").textContent = UI.formatBRL(totalGuardadoAtual());
     document.getElementById("poupanca-depositos").textContent = UI.formatBRL(depositos);
     document.getElementById("poupanca-retiradas").textContent = UI.formatBRL(retiradas);
@@ -610,10 +506,7 @@
       [
         { render: (r) => UI.formatDate(r.data) },
         { render: (r) => (r.tipo === "deposito" ? "Depósito" : "Retirada") },
-        {
-          render: (r) =>
-            `<span class="${r.tipo === "deposito" ? "value-in" : "value-out"}">${UI.formatBRL(r.valor)}</span>`
-        },
+        { render: (r) => `<span class="${r.tipo === "deposito" ? "value-in" : "value-out"}">${UI.formatBRL(r.valor)}</span>` },
         { field: "observacao" }
       ],
       [
@@ -624,8 +517,7 @@
             if (!confirm("Excluir esta movimentação?")) return;
             try {
               await Store.deleteItem("poupanca", row.id);
-              renderPoupanca();
-              Dashboard.render(Store.get());
+              renderTudo();
               UI.toast("Movimentação excluída");
             } catch (e) {
               UI.toast(e.message, true);
@@ -634,71 +526,6 @@
         }
       ]
     );
-  }
-
-  // ---------- INVESTIMENTOS (dados do Pluggy / Open Finance) ----------
-  const TIPOS_INVESTIMENTO = {
-    FIXED_INCOME: "Renda Fixa",
-    MUTUAL_FUND: "Fundo",
-    EQUITY: "Ações/FIIs",
-    ETF: "ETF",
-    SECURITY: "Previdência",
-    COE: "COE",
-    OTHER: "Outro"
-  };
-
-  function renderInvestimentosPluggy() {
-    const investimentos = (Store.get().pluggyInvestimentos || [])
-      .slice()
-      .sort((a, b) => Number(b.valor || 0) - Number(a.valor || 0));
-
-    const total = investimentos.reduce((s, i) => s + Number(i.valor || 0), 0);
-    const totalEl = document.getElementById("total-investimentos-pluggy");
-    if (totalEl) totalEl.textContent = UI.formatBRL(total);
-
-    const vazioEl = document.getElementById("investimentos-pluggy-vazio");
-    const cardEl = document.getElementById("investimentos-pluggy-card");
-    if (!cardEl) return;
-
-    if (!investimentos.length) {
-      if (vazioEl) vazioEl.style.display = "block";
-      cardEl.style.display = "none";
-      return;
-    }
-    if (vazioEl) vazioEl.style.display = "none";
-    cardEl.style.display = "block";
-
-    UI.renderTable(
-      document.querySelector("#table-investimentos-pluggy tbody"),
-      investimentos,
-      [
-        { field: "nome" },
-        { render: (i) => `<span class="tag">${TIPOS_INVESTIMENTO[i.tipo] || i.tipo || "Outro"}</span>` },
-        { render: (i) => `<span class="value-in">${UI.formatBRL(i.valor)}</span>` },
-        {
-          render: (i) =>
-            i.rentabilidadeUltimos12Meses != null ? `${Number(i.rentabilidadeUltimos12Meses).toFixed(2)}%` : "—"
-        },
-        { render: (i) => (i.dataAtualizacao ? UI.formatDate(i.dataAtualizacao) : "—") }
-      ],
-      []
-    );
-  }
-
-  // ---------- HELPERS ----------
-  function isRecorrente(item) {
-    return item.recorrente === true || item.recorrente === "true" || item.recorrente === "on";
-  }
-
-  // Badges de "Recorrente" e/ou "Importado" (veio automaticamente da
-  // sincronização com a Pluggy/Open Finance) numa célula só.
-  function tagsOrigemLancamento(r) {
-    const tags = [];
-    if (isRecorrente(r)) tags.push(`<span class="tag" style="background:#e6f9ec;color:#1a7f3c;">Recorrente</span>`);
-    if (r.origemImportacao === "pluggy") {
-      tags.push(`<span class="tag" style="background:#eef2ff;color:#4338ca;">🔄 Importado</span>`);
-    }
-    return tags.join(" ");
   }
 
   // ---------- FORM HANDLERS ----------
@@ -725,7 +552,7 @@
     });
   }
 
-  // Cadastro simples (sem edição) — usado em Receitas e Poupança.
+  // Cadastro simples (sem edição) — usado em Receitas, Poupança e Quitação.
   function setupForm(formId, sheetKey, onSuccess) {
     const form = document.getElementById(formId);
     form.addEventListener("submit", async (e) => {
@@ -735,7 +562,6 @@
         await Store.addItem(sheetKey, data);
         form.reset();
         onSuccess();
-        Dashboard.render(Store.get());
         UI.toast("Adicionado com sucesso");
       } catch (err) {
         UI.toast(err.message, true);
@@ -743,9 +569,9 @@
     });
   }
 
-  // Cadastro + edição — usado em Despesas do dia a dia, Gastos Fixos e Cartão.
+  // Cadastro + edição — usado em Receitas e Gastos.
   // Retorna { startEdit(row) } para os botões "Editar" das tabelas chamarem.
-  function setupEditableForm(formId, sheetKey, renderFn) {
+  function setupEditableForm(formId, sheetKey, onSuccess) {
     const form = document.getElementById(formId);
     const submitBtn = form.querySelector('button[type="submit"]');
     let editingId = null;
@@ -788,8 +614,7 @@
           UI.toast("Adicionado com sucesso");
         }
         stopEdit();
-        renderFn();
-        Dashboard.render(Store.get());
+        onSuccess();
       } catch (err) {
         UI.toast(err.message, true);
       }
@@ -798,13 +623,11 @@
     return { startEdit };
   }
 
-  // Salva o saldo inicial já guardado e a meta de investimento mensal
-  // (ambos ficam gravados na aba Config da planilha/DynamoDB), controlados
-  // por um painel lateral aberto através do ícone de engrenagem.
+  // Salva o saldo inicial já guardado (fica gravado na aba Config do
+  // DynamoDB), controlado por um painel lateral aberto pelo ícone de engrenagem.
   function setupPoupancaConfig() {
     const form = document.getElementById("form-poupanca-config");
     const saldoInput = document.getElementById("config-saldo-inicial");
-    const metaInput = document.getElementById("config-meta-mensal");
     const openBtn = document.getElementById("btn-open-poupanca-config");
     const closeBtn = document.getElementById("btn-close-poupanca-config");
     const overlay = document.getElementById("poupanca-config-overlay");
@@ -814,9 +637,6 @@
       const config = Store.get().config || {};
       if (document.activeElement !== saldoInput) {
         saldoInput.value = config.saldoInicial ?? "";
-      }
-      if (document.activeElement !== metaInput) {
-        metaInput.value = config.metaInvestimentoMensal ?? "";
       }
     }
 
@@ -839,9 +659,7 @@
       e.preventDefault();
       try {
         await Store.setConfigValue("saldoInicial", saldoInput.value || "0");
-        await Store.setConfigValue("metaInvestimentoMensal", metaInput.value || "0");
-        renderPoupanca();
-        Dashboard.render(Store.get());
+        renderTudo();
         UI.toast("Configurações salvas");
         closePanel();
       } catch (err) {
@@ -853,55 +671,32 @@
     return { preencherComConfigAtual };
   }
 
-  // ---------- SINCRONIZAÇÃO COM A PLUGGY (OPEN FINANCE) ----------
-  // Botão "Atualizar" da aba Despesas: pede pro backend buscar transações
-  // novas do banco/cartão conectados e lançar automaticamente. A
-  // sincronização diária automática já roda sozinha (Lambda agendada) —
-  // esse botão é só pra quando o usuário quer forçar uma busca na hora.
-  function setupSyncPluggy() {
-    const btn = document.getElementById("btn-sync-pluggy");
-    if (!btn) return;
-    const textoOriginal = btn.textContent;
-    btn.addEventListener("click", async () => {
-      btn.disabled = true;
-      btn.textContent = "Sincronizando…";
-      try {
-        const res = await Api.syncPluggy();
-        await Store.refresh();
-        renderReceitas();
-        renderDespesas();
-        renderCartao();
-        renderInvestimentosPluggy();
-        Dashboard.render(Store.get());
-        const msg =
-          res.importadas > 0
-            ? `${res.importadas} ${res.importadas === 1 ? "transação nova importada" : "transações novas importadas"}`
-            : "Nada novo por enquanto — já está tudo atualizado";
-        UI.toast(msg);
-      } catch (e) {
-        UI.toast("Erro ao sincronizar: " + e.message, true);
-      } finally {
-        btn.disabled = false;
-        btn.textContent = textoOriginal;
-      }
-    });
+  // ---------- RENDER GERAL ----------
+  // Como agora é tudo uma página só e as contas são baratas, simplesmente
+  // re-renderiza tudo a cada mudança — evita ter que lembrar manualmente
+  // quais seções dependem de qual dado.
+  function renderTudo() {
+    const state = Store.get();
+    renderResumo();
+    renderOrcamento();
+    renderReceitas();
+    renderDespesas();
+    renderDespesasMigracaoBanner(state.fixos);
+    renderContasFixasMes();
+    renderQuitacao();
+    renderPoupanca();
   }
 
   async function init() {
     Store.loadCache();
-    setupNav();
     showConfigBannerIfNeeded();
 
-    setupForm("form-poupanca", "poupanca", renderPoupanca);
-    setupForm("form-quitacao", "quitacao", () => {
-      renderQuitacao();
-      renderDespesas();
-    });
+    setupForm("form-poupanca", "poupanca", renderTudo);
+    setupForm("form-quitacao", "quitacao", renderTudo);
 
-    receitasEditor = setupEditableForm("form-receitas", "receitas", renderReceitas);
-    despesasEditor = setupEditableForm("form-despesas", "despesas", renderDespesas);
+    receitasEditor = setupEditableForm("form-receitas", "receitas", renderTudo);
+    despesasEditor = setupEditableForm("form-despesas", "despesas", renderTudo);
 
-    setupSyncPluggy();
     const poupancaConfig = setupPoupancaConfig();
 
     try {
@@ -910,14 +705,8 @@
       UI.toast("Não foi possível carregar os dados: " + e.message, true);
     }
 
-    renderReceitas();
-    renderDespesas();
-    renderCartao();
-    renderQuitacao();
-    renderPoupanca();
-    renderInvestimentosPluggy();
+    renderTudo();
     poupancaConfig.preencherComConfigAtual();
-    Dashboard.render(Store.get());
   }
 
   document.addEventListener("DOMContentLoaded", init);

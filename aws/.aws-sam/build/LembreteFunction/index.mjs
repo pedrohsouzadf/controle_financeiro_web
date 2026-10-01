@@ -6,7 +6,7 @@
 // escrevendo numa tabela DynamoDB.
 //
 // Modelo de dados (single-table design):
-//   pk = "RECEITAS" | "DESPESAS" | "FIXOS" | "CARTAO" | "POUPANCA" | "QUITACAO" | "CONFIG"
+//   pk = "RECEITAS" | "DESPESAS" | "FIXOS" | "POUPANCA" | "QUITACAO" | "CONFIG"
 //   sk = id do item (ou a "chave" de configuração, no caso de CONFIG)
 // ==========================================================
 
@@ -18,26 +18,18 @@ import {
   DeleteCommand,
   GetCommand
 } from "@aws-sdk/lib-dynamodb";
-import { syncAll } from "./pluggy.mjs";
 
 const client = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(client);
 
 const TABLE_NAME = process.env.TABLE_NAME;
 const API_KEY = process.env.API_KEY;
-const PLUGGY_CLIENT_ID = process.env.PLUGGY_CLIENT_ID;
-const PLUGGY_CLIENT_SECRET = process.env.PLUGGY_CLIENT_SECRET;
-const PLUGGY_ITEM_IDS = (process.env.PLUGGY_ITEM_IDS || "")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
 
 // Mapeia a chave usada pelo front-end para a partition key da tabela
 const SHEET_TO_PK = {
   receitas: "RECEITAS",
   despesas: "DESPESAS",
   fixos: "FIXOS",
-  cartao: "CARTAO",
   poupanca: "POUPANCA",
   quitacao: "QUITACAO"
 };
@@ -86,29 +78,22 @@ async function getConfig() {
 }
 
 async function handleGetAll() {
-  const [receitas, despesas, fixos, cartao, poupanca, quitacao, config, pluggyFaturas, pluggyInvestimentos] =
-    await Promise.all([
-      queryByType("RECEITAS"),
-      queryByType("DESPESAS"),
-      queryByType("FIXOS"),
-      queryByType("CARTAO"),
-      queryByType("POUPANCA"),
-      queryByType("QUITACAO"),
-      getConfig(),
-      queryByType("PLUGGY_FATURA"),
-      queryByType("PLUGGY_INVESTIMENTO")
-    ]);
+  const [receitas, despesas, fixos, poupanca, quitacao, config] = await Promise.all([
+    queryByType("RECEITAS"),
+    queryByType("DESPESAS"),
+    queryByType("FIXOS"),
+    queryByType("POUPANCA"),
+    queryByType("QUITACAO"),
+    getConfig()
+  ]);
   return response(200, {
     ok: true,
     receitas,
     despesas,
     fixos,
-    cartao,
     poupanca,
     quitacao,
-    config,
-    pluggyFaturas,
-    pluggyInvestimentos
+    config
   });
 }
 
@@ -156,20 +141,6 @@ async function handleSetConfig(body) {
   return response(200, { ok: true });
 }
 
-// Botão "Atualizar" da tela de Despesas: pede pra Pluggy ir buscar dados
-// frescos na instituição (best-effort) e lança as transações novas.
-async function handleSyncPluggy() {
-  const resultado = await syncAll({
-    ddb,
-    TABLE_NAME,
-    clientId: PLUGGY_CLIENT_ID,
-    clientSecret: PLUGGY_CLIENT_SECRET,
-    itemIds: PLUGGY_ITEM_IDS,
-    forceUpdate: true
-  });
-  return response(200, { ok: true, ...resultado });
-}
-
 export const handler = async (event) => {
   try {
     const method = event.requestContext?.http?.method || "GET";
@@ -200,8 +171,6 @@ export const handler = async (event) => {
           return await handleUpdate(body);
         case "setConfig":
           return await handleSetConfig(body);
-        case "syncPluggy":
-          return await handleSyncPluggy();
         default:
           return response(400, { ok: false, error: "Ação inválida" });
       }

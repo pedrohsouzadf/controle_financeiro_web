@@ -17,256 +17,231 @@
   <div class="topbar-inner">
     <div class="brand">💰 Meu Financeiro</div>
   </div>
-  <nav class="tabs">
-    <button data-view="dashboard" class="active">Dashboard</button>
-    <button data-view="receitas">Receitas</button>
-    <button data-view="despesas">Despesas</button>
-    <button data-view="cartao">Cartão de crédito</button>
-    <button data-view="poupanca">Investimentos</button>
-  </nav>
 </header>
 
 <main>
 
-  <!-- ===================== DASHBOARD ===================== -->
-  <section id="view-dashboard" class="view active">
-    <div class="section-title-row" style="flex-wrap:wrap; gap:10px;">
-      <div class="section-title">Dashboard</div>
-      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-        <select id="filtro-mes-dashboard" style="width:auto;"></select>
-        <div style="display:flex; gap:4px;">
-          <button type="button" class="btn secondary" id="btn-dashboard-geral">Visão geral</button>
-          <button type="button" class="btn secondary" id="btn-dashboard-mensal">Visão mensal</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="dashboard-kpis"></div>
-
-    <div class="grid cols-2" style="margin-top:16px;">
-      <div class="card">
-        <h3>Despesas por categoria</h3>
-        <div class="chart-wrap"><canvas id="chart-categorias"></canvas></div>
-      </div>
-      <div class="card">
-        <h3>Receitas x Despesas (últimos 6 meses)</h3>
-        <div class="chart-wrap"><canvas id="chart-evolucao"></canvas></div>
-      </div>
-    </div>
-
-    <div class="card" style="margin-top:16px;">
-      <h3>Insights</h3>
-      <div id="insights-list"></div>
-    </div>
-  </section>
-
-  <!-- ===================== RECEITAS ===================== -->
-  <section id="view-receitas" class="view">
-    <div class="section-title-row">
-      <div class="section-title">Receitas</div>
-      <div style="display:flex; align-items:center; gap:10px;">
-        <select id="filtro-mes-receitas" style="width:auto;"></select>
-        <div class="kpi-value" id="total-receitas-tab" style="font-size:18px;">R$ 0,00</div>
-      </div>
+  <!-- ===================== RESUMO DO MÊS ===================== -->
+  <div class="section-title-row">
+    <div class="section-title">Resumo do mês</div>
+  </div>
+  <div class="grid cols-4">
+    <div class="card">
+      <div class="kpi-label">Receita do mês</div>
+      <div class="kpi-value positive" id="resumo-receita">R$ 0,00</div>
     </div>
     <div class="card">
-      <h3>Adicionar receita</h3>
-      <form class="inline-form" id="form-receitas">
-        <div><label>Data</label><input type="date" name="data" required /></div>
-        <div><label>Descrição</label><input type="text" name="descricao" required placeholder="Ex: Salário" /></div>
-        <div>
-          <label>Categoria</label>
-          <select name="categoria">
-            <option>Salário</option>
-            <option>Freelance</option>
-            <option>Investimentos</option>
-            <option>Presente</option>
+      <div class="kpi-label">Gastos fixos</div>
+      <div class="kpi-value negative" id="resumo-fixos">R$ 0,00</div>
+    </div>
+    <div class="card">
+      <div class="kpi-label">Guardar este mês (sugestão de 20%)</div>
+      <div class="kpi-value" id="resumo-poupanca-sugerida">R$ 0,00</div>
+    </div>
+    <div class="card">
+      <div class="kpi-label">Livre pra gastar</div>
+      <div class="kpi-value" id="resumo-livre">R$ 0,00</div>
+    </div>
+  </div>
+  <p style="font-size:12px; color:var(--text-muted); margin:10px 0 0;">
+    "Livre pra gastar" = Receita − Gastos fixos − Guardar este mês. É o total que as categorias abaixo dividem entre si.
+  </p>
+
+  <!-- ===================== ORÇAMENTO POR CATEGORIA ===================== -->
+  <div class="section-title-row" style="margin-top:32px;">
+    <div class="section-title">Quanto posso gastar por categoria</div>
+  </div>
+  <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">
+    Sugestão baseada na regra 50-30-20 (50% necessidades, 30% desejos, 20% poupança), dividida entre as categorias de gasto variável do dia a dia. Atualiza sozinha conforme você lança receitas, gastos fixos e gastos do mês.
+  </p>
+  <div class="card">
+    <table id="table-orcamento">
+      <thead><tr><th>Categoria</th><th>Orçamento sugerido</th><th>Já gasto</th><th>Restante</th><th style="min-width:140px;">Progresso</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- ===================== LANÇAR GASTO (DINHEIRO OU CARTÃO) ===================== -->
+  <div class="section-title-row" style="margin-top:32px; flex-wrap:wrap; gap:10px;">
+    <div class="section-title">Gastos do mês</div>
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <div class="kpi-label" style="margin:0;">💳 No cartão este mês</div>
+      <div class="kpi-value negative" id="total-cartao-mes" style="font-size:18px;">R$ 0,00</div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Lançar gasto</h3>
+    <form class="inline-form" id="form-despesas">
+      <div><label>Data</label><input type="date" name="data" required /></div>
+      <div><label>Descrição</label><input type="text" name="descricao" required placeholder="Ex: Ifood, Aluguel" /></div>
+      <div>
+        <label>Categoria</label>
+        <select name="categoria">
+          <optgroup label="Necessidades (50%)">
+            <option>Moradia</option>
+            <option>Contas Básicas</option>
+            <option>Alimentação Básica</option>
+            <option>Saúde</option>
+            <option>Transporte</option>
+            <option>Educação</option>
+          </optgroup>
+          <optgroup label="Desejos e Estilo de Vida (30%)">
+            <option>Lazer</option>
+            <option>Alimentação Fora</option>
+            <option>Assinaturas</option>
+            <option>Compras Pessoais</option>
             <option>Outros</option>
-          </select>
-        </div>
-        <div><label>Valor (R$)</label><input type="number" step="0.01" name="valor" required placeholder="0,00" /></div>
-        <div style="display:flex; align-items:center; gap:6px; padding-bottom:9px;">
-          <input type="checkbox" name="recorrente" id="receita-recorrente" style="width:auto;" />
-          <label for="receita-recorrente" style="margin:0;">Recorrente (todo mês)</label>
-        </div>
-        <div><button class="btn" type="submit">Adicionar</button></div>
-      </form>
-      <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Marque "Recorrente" para receitas fixas como salário, VA, CAJU — assim ela entra automaticamente no cálculo todos os meses, sem precisar cadastrar de novo.</p>
-      <table id="table-receitas">
-        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th></th><th></th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- ===================== DESPESAS ===================== -->
-  <section id="view-despesas" class="view">
-    <div class="section-title-row" style="flex-wrap:wrap; gap:10px;">
-      <div class="section-title">Despesas</div>
-      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-        <select id="filtro-mes-despesas" style="width:auto;"></select>
-        <select id="filtro-grupo-despesas" style="width:auto;"></select>
-        <button type="button" class="btn secondary" id="btn-sync-pluggy" title="Busca transações novas do banco/cartão conectados via Open Finance">🔄 Atualizar</button>
-        <div class="kpi-value" id="total-despesas-tab" style="font-size:18px;">R$ 0,00</div>
+          </optgroup>
+          <optgroup label="Investimentos (20%)">
+            <option>Dívidas/Financiamento</option>
+            <option>Reserva de Emergência</option>
+            <option>Investimentos</option>
+          </optgroup>
+          <optgroup label="Gastos Extraordinários">
+            <option>Gastos Extraordinários</option>
+          </optgroup>
+        </select>
       </div>
+      <div>
+        <label>Forma de pagamento</label>
+        <select name="formaPagamento">
+          <option value="dinheiro">Dinheiro / Pix / Débito</option>
+          <option value="cartao">Cartão de crédito</option>
+        </select>
+      </div>
+      <div><label>Valor (R$)</label><input type="number" step="0.01" name="valor" required placeholder="0,00" /></div>
+      <div style="display:flex; align-items:center; gap:6px; padding-bottom:9px;">
+        <input type="checkbox" name="recorrente" id="despesa-recorrente" style="width:auto;" />
+        <label for="despesa-recorrente" style="margin:0;">Recorrente (todo mês — vira gasto fixo)</label>
+      </div>
+      <div><button class="btn" type="submit">Adicionar</button></div>
+    </form>
+    <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">
+      Marque "Recorrente" para aluguel, assinaturas, financiamentos — contam todo mês automaticamente como Gasto Fixo e saem da conta de "Quanto posso gastar por categoria". Compras do dia a dia (no cartão ou não) ficam só no mês em que foram feitas.
+    </p>
+    <div class="section-title-row" style="margin:0 0 8px;">
+      <h3 style="margin:0;">Lançamentos deste mês</h3>
+      <div class="kpi-value" id="total-despesas-tab" style="font-size:18px;">R$ 0,00</div>
     </div>
-    <div id="despesas-migracao-fixos" style="display:none;"></div>
-    <div class="card" style="margin-bottom:16px;">
-      <h3>Contas fixas deste mês</h3>
-      <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Toda conta recorrente (despesas marcadas "Recorrente", assinaturas do cartão, parcelas em aberto da Quitação) aparece aqui todo mês — marque "Paguei" pra ir riscando da lista. Isso é só um lembrete visual, guardado no seu navegador; não muda nenhum número do sistema.</p>
-      <div id="despesas-fixas-mes-lista"></div>
+    <table id="table-despesas">
+      <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Forma</th><th>Valor</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- ===================== CONTAS FIXAS DESTE MÊS (checklist) ===================== -->
+  <div class="section-title-row" style="margin-top:32px;">
+    <div class="section-title">Contas fixas deste mês</div>
+  </div>
+  <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">
+    Todo gasto marcado "Recorrente" acima, mais contas fixas antigas e parcelas da Quitação em aberto, aparecem aqui — marque "Paguei" pra ir riscando da lista. Isso é só um lembrete visual, guardado no seu navegador; não muda nenhum número do sistema.
+  </p>
+  <div id="despesas-migracao-fixos" style="display:none;"></div>
+  <div class="card">
+    <div id="despesas-fixas-mes-lista"></div>
+  </div>
+
+  <!-- ===================== RECEITA ===================== -->
+  <div class="section-title-row" style="margin-top:32px;">
+    <div class="section-title">Receita</div>
+    <div class="kpi-value" id="total-receitas-tab" style="font-size:18px;">R$ 0,00</div>
+  </div>
+  <div class="card">
+    <h3>Adicionar receita</h3>
+    <form class="inline-form" id="form-receitas">
+      <div><label>Data</label><input type="date" name="data" required /></div>
+      <div><label>Descrição</label><input type="text" name="descricao" required placeholder="Ex: Salário" /></div>
+      <div>
+        <label>Categoria</label>
+        <select name="categoria">
+          <option>Salário</option>
+          <option>Freelance</option>
+          <option>Investimentos</option>
+          <option>Presente</option>
+          <option>Outros</option>
+        </select>
+      </div>
+      <div><label>Valor (R$)</label><input type="number" step="0.01" name="valor" required placeholder="0,00" /></div>
+      <div style="display:flex; align-items:center; gap:6px; padding-bottom:9px;">
+        <input type="checkbox" name="recorrente" id="receita-recorrente" style="width:auto;" />
+        <label for="receita-recorrente" style="margin:0;">Recorrente (todo mês)</label>
+      </div>
+      <div><button class="btn" type="submit">Adicionar</button></div>
+    </form>
+    <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Marque "Recorrente" para receitas fixas como salário, VA, CAJU — assim ela entra automaticamente no cálculo todos os meses, sem precisar cadastrar de novo.</p>
+    <table id="table-receitas">
+      <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th></th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- ===================== QUITAÇÃO DE PARCELAS ANTIGAS ===================== -->
+  <div class="section-title-row" style="margin-top:32px;">
+    <div class="section-title">Quitação de parcelas antigas</div>
+    <div class="kpi-value negative" id="total-quitacao-tab" style="font-size:18px;">R$ 0,00</div>
+  </div>
+  <div class="card">
+    <h3>Adicionar parcelamento em aberto</h3>
+    <p style="font-size:12px; color:var(--text-muted); margin-top:-4px;">Use esta lista para organizar parcelamentos antigos que você já fez e ainda precisa quitar.</p>
+    <form class="inline-form" id="form-quitacao">
+      <div><label>Cartão</label><input type="text" name="cartao" required placeholder="Ex: Nubank" /></div>
+      <div><label>Descrição da compra</label><input type="text" name="descricao" required placeholder="Ex: Notebook" /></div>
+      <div><label>Valor total (R$)</label><input type="number" step="0.01" name="valorTotal" required placeholder="0,00" /></div>
+      <div><label>Quantidade de parcelas</label><input type="number" min="1" name="qtdParcelas" required placeholder="Ex: 10" /></div>
+      <div><label>Parcelas já pagas</label><input type="number" min="0" name="parcelasPagas" value="0" placeholder="Ex: 5" /></div>
+      <div><button class="btn" type="submit">Adicionar</button></div>
+    </form>
+    <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Se o parcelamento já está em andamento (ex: você já pagou 5 das 10 parcelas), preencha "Parcelas já pagas" — daí é só usar os botões +/− na tabela pra ir marcando cada parcela seguinte.</p>
+    <table id="table-quitacao">
+      <thead><tr><th>Cartão</th><th>Descrição</th><th>Valor total</th><th>Progresso</th><th>Valor da parcela</th><th>Valor restante</th><th>Status</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- ===================== POUPANÇA ===================== -->
+  <div class="section-title-row" style="margin-top:32px;">
+    <div class="section-title">Poupança</div>
+    <button type="button" class="icon-btn" id="btn-open-poupanca-config" title="Configurações" aria-label="Configurações">⚙️</button>
+  </div>
+
+  <div class="grid cols-3">
+    <div class="card">
+      <div class="kpi-label">Total guardado</div>
+      <div class="kpi-value" id="poupanca-total">R$ 0,00</div>
     </div>
     <div class="card">
-      <h3>Adicionar despesa</h3>
-      <form class="inline-form" id="form-despesas">
-        <div><label>Data</label><input type="date" name="data" required /></div>
-        <div><label>Descrição</label><input type="text" name="descricao" required placeholder="Ex: Almoço, Aluguel" /></div>
-        <div>
-          <label>Categoria</label>
-          <select name="categoria">
-            <optgroup label="Necessidades (50%)">
-              <option>Moradia</option>
-              <option>Contas Básicas</option>
-              <option>Alimentação Básica</option>
-              <option>Saúde</option>
-              <option>Transporte</option>
-              <option>Educação</option>
-            </optgroup>
-            <optgroup label="Desejos e Estilo de Vida (30%)">
-              <option>Lazer</option>
-              <option>Alimentação Fora</option>
-              <option>Assinaturas</option>
-              <option>Compras Pessoais</option>
-              <option>Outros</option>
-            </optgroup>
-            <optgroup label="Investimentos (20%)">
-              <option>Dívidas/Financiamento</option>
-              <option>Reserva de Emergência</option>
-              <option>Investimentos</option>
-            </optgroup>
-            <optgroup label="Gastos Extraordinários">
-              <option>Gastos Extraordinários</option>
-            </optgroup>
-          </select>
-        </div>
-        <div><label>Valor (R$)</label><input type="number" step="0.01" name="valor" required placeholder="0,00" /></div>
-        <div style="display:flex; align-items:center; gap:6px; padding-bottom:9px;">
-          <input type="checkbox" name="recorrente" id="despesa-recorrente" style="width:auto;" />
-          <label for="despesa-recorrente" style="margin:0;">Recorrente (todo mês, ex: aluguel, assinatura)</label>
-        </div>
-        <div><button class="btn" type="submit">Adicionar</button></div>
-      </form>
-      <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Compras no cartão conectado via Open Finance entram aqui sozinhas (veja a aba "Cartão de crédito" pra ver o total por fatura). Se usar um cartão não conectado, lance a compra aqui normalmente. Marque "Recorrente" para contas fixas (aluguel, internet, academia) — elas entram automaticamente todo mês, sem precisar recadastrar.</p>
-      <table id="table-despesas">
-        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th></th><th></th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- ===================== CARTÃO DE CRÉDITO ===================== -->
-  <section id="view-cartao" class="view">
-    <div class="section-title-row">
-      <div class="section-title">Cartão de crédito</div>
-      <div style="display:flex; align-items:center; gap:10px;">
-        <div class="kpi-value" id="total-cartao-tab" style="font-size:18px;">R$ 0,00</div>
-      </div>
-    </div>
-    <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Mostra só o que vem do cartão conectado via Open Finance (Pluggy): o total de cada fatura e as compras que a compõem. É só leitura — as compras já entram automaticamente na aba Despesas.</p>
-    <div id="cartao-pluggy-vazio" class="card" style="display:none;">
-      <p style="margin:0;">Nenhum cartão conectado ainda, ou a sincronização ainda não trouxe faturas. Conecte um cartão pelo Meu Pluggy e clique em "🔄 Atualizar" na aba Despesas.</p>
-    </div>
-    <div id="cartao-pluggy-faturas"></div>
-
-    <!-- ---------------- QUITAÇÃO DE PARCELAS ANTIGAS ---------------- -->
-    <div class="section-title-row" style="margin-top:32px;">
-      <div class="section-title">Quitação de parcelas antigas</div>
-      <div style="display:flex; align-items:center; gap:10px;">
-        <div class="kpi-value negative" id="total-quitacao-tab" style="font-size:18px;">R$ 0,00</div>
-      </div>
+      <div class="kpi-label">Depósitos (total)</div>
+      <div class="kpi-value positive" id="poupanca-depositos">R$ 0,00</div>
     </div>
     <div class="card">
-      <h3>Adicionar parcelamento em aberto</h3>
-      <p style="font-size:12px; color:var(--text-muted); margin-top:-4px;">Use esta lista para organizar parcelamentos antigos que você já fez e ainda precisa quitar — diferente da tabela acima, que é para os lançamentos correntes do cartão.</p>
-      <form class="inline-form" id="form-quitacao">
-        <div><label>Cartão</label><input type="text" name="cartao" required placeholder="Ex: Nubank" /></div>
-        <div><label>Descrição da compra</label><input type="text" name="descricao" required placeholder="Ex: Notebook" /></div>
-        <div><label>Valor total (R$)</label><input type="number" step="0.01" name="valorTotal" required placeholder="0,00" /></div>
-        <div><label>Quantidade de parcelas</label><input type="number" min="1" name="qtdParcelas" required placeholder="Ex: 10" /></div>
-        <div><label>Parcelas já pagas</label><input type="number" min="0" name="parcelasPagas" value="0" placeholder="Ex: 5" /></div>
-        <div><button class="btn" type="submit">Adicionar</button></div>
-      </form>
-      <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Se o parcelamento já está em andamento (ex: você já pagou 5 das 10 parcelas), preencha "Parcelas já pagas" — daí é só usar os botões +/− na tabela pra ir marcando cada parcela seguinte.</p>
-      <table id="table-quitacao">
-        <thead><tr><th>Cartão</th><th>Descrição</th><th>Valor total</th><th>Progresso</th><th>Valor da parcela</th><th>Valor restante</th><th>Status</th><th></th></tr></thead>
-        <tbody></tbody>
-      </table>
+      <div class="kpi-label">Retiradas (total)</div>
+      <div class="kpi-value negative" id="poupanca-retiradas">R$ 0,00</div>
     </div>
-  </section>
+  </div>
 
-  <!-- ===================== POUPANÇA / SIMULAÇÃO ===================== -->
-  <section id="view-poupanca" class="view">
-    <div class="section-title-row">
-      <div class="section-title">Poupança</div>
-      <div style="display:flex; align-items:center; gap:10px;">
-        <select id="filtro-mes-poupanca" style="width:auto;"></select>
-        <button type="button" class="icon-btn" id="btn-open-poupanca-config" title="Configurações" aria-label="Configurações">⚙️</button>
+  <div class="card" style="margin-top:16px;">
+    <h3>Registrar movimentação</h3>
+    <form class="inline-form" id="form-poupanca">
+      <div><label>Data</label><input type="date" name="data" required /></div>
+      <div>
+        <label>Tipo</label>
+        <select name="tipo">
+          <option value="deposito">Depósito</option>
+          <option value="retirada">Retirada</option>
+        </select>
       </div>
-    </div>
-
-    <div class="grid cols-3">
-      <div class="card">
-        <div class="kpi-label">Total guardado</div>
-        <div class="kpi-value" id="poupanca-total">R$ 0,00</div>
-      </div>
-      <div class="card">
-        <div class="kpi-label">Depósitos (total)</div>
-        <div class="kpi-value positive" id="poupanca-depositos">R$ 0,00</div>
-      </div>
-      <div class="card">
-        <div class="kpi-label">Retiradas (total)</div>
-        <div class="kpi-value negative" id="poupanca-retiradas">R$ 0,00</div>
-      </div>
-    </div>
-
-    <div class="card" style="margin-top:16px;">
-      <h3>Registrar movimentação</h3>
-      <form class="inline-form" id="form-poupanca">
-        <div><label>Data</label><input type="date" name="data" required /></div>
-        <div>
-          <label>Tipo</label>
-          <select name="tipo">
-            <option value="deposito">Depósito</option>
-            <option value="retirada">Retirada</option>
-          </select>
-        </div>
-        <div><label>Valor (R$)</label><input type="number" step="0.01" name="valor" required placeholder="0,00" /></div>
-        <div><label>Observação</label><input type="text" name="observacao" placeholder="Opcional" /></div>
-        <div><button class="btn" type="submit">Registrar</button></div>
-      </form>
-      <table id="table-poupanca">
-        <thead><tr><th>Data</th><th>Tipo</th><th>Valor</th><th>Observação</th><th></th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-
-    <div class="section-title-row" style="margin-top:32px;">
-      <div class="section-title">Investimentos (Open Finance)</div>
-      <div style="display:flex; align-items:center; gap:10px;">
-        <div class="kpi-value positive" id="total-investimentos-pluggy" style="font-size:18px;">R$ 0,00</div>
-      </div>
-    </div>
-    <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">Puxado automaticamente do banco/corretora conectados via Open Finance (Pluggy) — atualiza junto com o botão "🔄 Atualizar" da aba Despesas.</p>
-    <div id="investimentos-pluggy-vazio" class="card" style="display:none;">
-      <p style="margin:0;">Nenhum investimento encontrado ainda. Se você tem investimentos no banco/corretora conectados, clique em "🔄 Atualizar" na aba Despesas.</p>
-    </div>
-    <div class="card" id="investimentos-pluggy-card" style="display:none;">
-      <table id="table-investimentos-pluggy">
-        <thead><tr><th>Nome</th><th>Tipo</th><th>Valor atual</th><th>Rentabilidade 12m</th><th>Atualizado em</th><th></th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </section>
+      <div><label>Valor (R$)</label><input type="number" step="0.01" name="valor" required placeholder="0,00" /></div>
+      <div><label>Observação</label><input type="text" name="observacao" placeholder="Opcional" /></div>
+      <div><button class="btn" type="submit">Registrar</button></div>
+    </form>
+    <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">
+      Sugestão: guardar <span id="poupanca-meta-sugerida-texto">R$ 0,00</span>/mês (20% da sua receita) — o mesmo valor do card "Guardar este mês" lá em cima.
+    </p>
+    <table id="table-poupanca">
+      <thead><tr><th>Data</th><th>Tipo</th><th>Valor</th><th>Observação</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
 
 </main>
 
@@ -287,23 +262,18 @@
         <label>Saldo inicial já guardado (R$)</label>
         <input type="number" step="0.01" id="config-saldo-inicial" placeholder="0,00" />
       </div>
-      <div style="margin-bottom:16px;">
-        <label>Meta de investimento mensal (R$)</label>
-        <input type="number" step="0.01" id="config-meta-mensal" placeholder="0,00" />
-      </div>
       <button class="btn" type="submit" style="width:100%;">Salvar</button>
     </form>
-    <p style="font-size:12px; color:var(--text-muted); margin-top:16px;">O saldo inicial é somado aos depósitos/retiradas registrados na aba Poupança para calcular o "Total guardado". A meta mensal pré-preenche a simulação e aparece nos insights do Dashboard, comparando com quanto sobra da sua renda.</p>
+    <p style="font-size:12px; color:var(--text-muted); margin-top:16px;">O saldo inicial é somado aos depósitos/retiradas registrados abaixo para calcular o "Total guardado".</p>
   </div>
 </aside>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
 <script src="js/store.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/categories.js"></script>
-<script src="js/dashboard.js"></script>
+<script src="js/orcamento.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

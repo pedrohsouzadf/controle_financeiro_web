@@ -10,12 +10,9 @@ const Store = (() => {
     receitas: [],
     despesas: [],
     fixos: [],
-    cartao: [],
     poupanca: [],
     quitacao: [],
-    config: {},
-    pluggyFaturas: [],
-    pluggyInvestimentos: []
+    config: {}
   };
 
   function loadCache() {
@@ -45,12 +42,9 @@ const Store = (() => {
       receitas: data.receitas || [],
       despesas: data.despesas || [],
       fixos: data.fixos || [],
-      cartao: data.cartao || [],
       poupanca: data.poupanca || [],
       quitacao: data.quitacao || [],
-      config: data.config || {},
-      pluggyFaturas: data.pluggyFaturas || [],
-      pluggyInvestimentos: data.pluggyInvestimentos || []
+      config: data.config || {}
     };
     saveCache();
     return state;
